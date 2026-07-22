@@ -21,7 +21,7 @@ library(phsstyles)
 
 ```{r}
 month_demo_data <- read.csv("datasets/opendata_monthly_ae_demographics_202604.csv")
-# month_activity_data <- read.csv("datasets/monthly_ae_activity_202605.csv")
+month_activity_data <- read.csv("datasets/monthly_ae_activity_202605.csv")
 week_activity_data <- read.csv("datasets/weekly_ae_activity_20260628.csv")
 
 # Treatment location data set
@@ -29,6 +29,8 @@ trt_loc <- read.csv("datasets/ae_hospital_site_list_09_09_2025.csv")
 
 # SIMD lookup 
 simd_lookup <- read_xlsx("datasets/SIMD_2020v2_postcode_lookup_updated_2025.xlsx", sheet = 2)
+
+
 ```
 
 ```{r}
@@ -288,7 +290,9 @@ ggsave("figures/m_demo/attendances_histogram_log.pdf", plot = attendances_hist_l
 
 ```
 
-# 3. Weekly activity data
+# 3. Activity data
+
+## 3.1 Weekly data
 
 This data set is only Type 1 (ED)
 And all the rows are duplicated a they have 2 categories: unplanned and planned, 
@@ -306,6 +310,15 @@ week_activity_data <- week_activity_data %>%
   mutate(w_date = ymd(as.character(WeekEndingDate)),
          year    = format(w_date, "%Y"),
          m_num   = as.integer(format(w_date, "%m")))
+```
+
+## 3.2 Monthly data
+
+```{r}
+summarise_columns(month_activity_data)
+head(month_activity_data)
+tail(month_activity_data)
+
 ```
 
 # 4. Treatment location data
@@ -419,6 +432,11 @@ top10_locations <- location_year_attendance %>%
 
 top10_locations
 
+# Convert the top-10 names to their location codes 
+top10_codes <- trt_loc %>%
+  filter(TreatmentLocationName %in% top10_locations) %>%
+  pull(TreatmentLocationCode)
+
 # Plot locations by number of attendances
 top10_trend_overlay_plt <- location_year_attendance %>%
   filter(TreatmentLocationName %in% top10_locations) %>%
@@ -440,8 +458,159 @@ top10_trend_overlay_plt <- location_year_attendance %>%
 
 top10_trend_overlay_plt
 
-ggsave("figures/top10_location_trend_overlay.pdf", plot = top10_trend_overlay_plt, width = 10, height = 6)
+ggsave("figures/top10_location_trend_overlay.pdf", plot = top10_trend_overlay_plt, width = 11, height = 6)
 
 ```
+
+
+
+# 5. Population data
+
+Load dataset, as it contains multiple sheets we only import the ones we are going to use
+```{r}
+# Table 1: population by sex and age by admin area
+population_data_1 <- read_xlsx("datasets/data-mid-year-population-estimates-2024.xlsx", sheet = 4, skip = 3)
+
+summarise_columns(population_data_1)
+head(population_data_1)
+```
+
+Sex: person (all), female and male
+Area type: Scotland (all), council area, HB
+
+
+# 6. Referrals data
+
+```{r}
+referrals_data <- read.csv("datasets/opendata_monthly_ae_referral_202604.csv")
+summarise_columns(referrals_data)
+head(referrals_data)
+```
+
+
+```{r}
+# Attendance by referral type in general
+referral_types <- referrals_data %>%
+  mutate(Referral = case_when(
+    is.na(Referral) | trimws(Referral) %in% c("", ":") ~ "Not Known",
+    TRUE ~ Referral
+  )) %>%
+  group_by(Referral) %>%
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
+
+referrals_type_plt <- ggplot(referral_types, 
+                              aes(x = fct_reorder(Referral, total), y = total)) +
+  geom_col(fill = phs_colours("phs-graphite")) +
+  coord_flip() +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = NULL, y = "Total Attendances",
+       title = "Attendances by Referral Source") +
+  theme_phs()
+
+referrals_type_plt
+
+ggsave("figures/attendances_by_referral.pdf", plot = referrals_type_plt, width = 8, height = 5)
+```
+
+```{r}
+
+# Attendance by referral type and age
+referral_age_data <- referrals_data %>%
+  filter(!is.na(Age), Age != "") %>%
+  mutate(Referral = case_when(
+    is.na(Referral) | trimws(Referral) %in% c("", ":") ~ "Not Known",
+    TRUE ~ Referral
+  )) %>%
+  group_by(Referral, Age) %>%
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
+
+referral_age_plt <- ggplot(referral_age_data, 
+                            aes(x = Age, y = total, fill = Referral)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = phs_colours(c("phs-purple", "phs-magenta", "phs-blue", "phs-green",
+                                             "phs-graphite", "phs-teal", "phs-liberty", "phs-rust"))) +
+  scale_y_continuous(labels = scales::comma) +
+  labs(x = "Age Group", y = "Total Attendances", fill = "Referral Source",
+       title = "Attendances by Age Group and Referral Source") +
+  theme_phs() +
+  theme(legend.text = element_text(size = 9), legend.key.size = unit(0.4, "cm"))
+
+referral_age_plt
+
+ggsave("figures/referral_by_age.pdf", plot = referral_age_plt, width = 11, height = 6)
+```
+
+```{r}
+referral_top10_data <- referrals_data %>%
+  filter(!is.na(Referral), Referral != "", 
+         TreatmentLocation %in% top10_codes) %>%
+  left_join(trt_loc, by = c("TreatmentLocation" = "TreatmentLocationCode")) %>%
+  group_by(TreatmentLocationName, Referral) %>%
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
+
+referral_top10_pct <- referral_top10_data %>%
+  group_by(TreatmentLocationName) %>%
+  mutate(pct = total / sum(total) * 100) %>%
+  ungroup()
+
+referral_heatmap_plt <- ggplot(referral_top10_pct, 
+                                aes(x = Referral, y = TreatmentLocationName, fill = pct)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = round(pct, 0)), size = 3, colour = "black") +
+  scale_fill_gradient(low = "white", high = phs_colours("phs-blue"), name = "% of\nattendances") +
+  labs(x = "Referral Source", y = NULL,
+       title = "Referral Source Mix by Top 10 A&E Locations") +
+  theme_phs() +
+  theme(
+    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
+    axis.text.y = element_text(size = 9),
+    panel.grid = element_blank()
+  )
+
+referral_heatmap_plt
+
+ggsave("figures/referral_heatmap_top10.pdf", plot = referral_heatmap_plt, width = 10, height = 7)
+```
+
+Unir monthly activity with referrals:
+
+
+
+# 7. Discharges
+
+```{r}
+discharges_data <- read.csv("datasets/opendata_monthly_ae_discharge_202604.csv")
+
+summarise_columns(discharges_data)
+head(discharges_data)
+```
+
+
+# 8. Multiple attendances
+
+```{r}
+mul_att_data <- read.csv("datasets/opendata_monthly_ae_multiple_attendances_demographics_202604.csv")
+
+summarise_columns(mul_att_data)
+head(mul_att_data)
+tail(mul_att_data)
+```
+
+
+# 9. When attendance
+```{r}
+when_data <- read.csv("datasets/opendata_monthly_ae_when_202604.csv")
+
+summarise_columns(when_data)
+head(when_data)
+```
+
+
+
+
+
+
+
+
 
 
