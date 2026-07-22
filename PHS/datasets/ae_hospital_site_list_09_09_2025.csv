@@ -1,0 +1,103 @@
+HB,TreatmentLocationName,TreatmentLocationCode,TreatmentLocationPostcode,CurrentDepartmentType,FileType,Comments,Status
+S08000015,University Hospital Ayr,A210H,KA6 6DX,Type 1,Episode,None,Open
+S08000015,University Hospital Crosshouse,A111H,KA2 0BE,Type 1,Episode,None,Open
+S08000015,Arran War Memorial Hospital,A101H,KA278LF,Type 3,Aggregate,None,Open
+S08000015,Davidson Cottage Hospital,A207H,KA269DS,Type 3,Aggregate,Closed from May 2010,Closed
+S08000015,Girvan Community Hospital,A216H,KA269HQ,Type 3,Aggregate,Opened from May 2010,Open
+S08000015,Lady Margaret Hospital,A110H,KA280HF,Type 3,Aggregate,Opened from October 2007,Open
+S08000016,Borders General Hospital,B120H,TD6 9BS,Type 1,Episode,Borders General Hospital transferred to a new patient management system at the end of November 2010. There was an issue with the new system that prevented the recording of different attendance categories from November 2010 to September 2011. This results in the attendance figures for Borders General being artificially inflated by approximately 0.8 % (estimated from the prior 12 month s data). Please interpret the attendances and the associated rates from this time period with caution.,Open
+S08000016,Hawick Cottage Hospital,B105H,TD9 7AH,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000016,Hay Lodge Hospital,B118H,EH458JG,Type 3,Aggregate,"In April 2020, Hay Lodge Hospital closed as response to COVID-19. There was a very small numbers from May to November they have seen 36 patients in total, these have been recorded in the month November 2020.",Closed
+S08000016,Kelso Hospital,B114H,TD5 7JP,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000016,Knoll Hospital,B103H,TD113EL,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000017,Dumfries & Galloway Royal Infirmary,Y146H,DG2 8RX,Type 1,Episode,"As of 08:00 hrs on 8 December 2017, Dumfries & Galloway Royal Infirmary moved to a new location.",Open
+S08000017,Galloway Community Hospital,Y144H,DG9 7DQ,Type 1,Episode,Episode file from December 2007,Open
+S08000017,Castle Douglas Hospital,Y101H,DG7 1EE,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000017,Kirkcudbright Hospital,Y106H,DG6 4BE,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000017,Moffat Hospital,Y109H,DG109JY,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000017,Newton Stewart Hospital,Y110H,DG8 6LZ,Type 3,Episode,Episode file from March 2012. Closed from April 2020.,Closed
+S08000029,Victoria Hospital (NHS Fife),F704H,KY2 5AH,Type 1,Episode,As of 08:00 hrs on 19 January 2012 all Emergency Department (ED) services were transferred to Victoria Hospital and Queen Margaret Hospital became a Minor Injury Unit (MIU).,Open
+S08000029,Adamson Hospital,F708H,KY154JG,Type 3,Episode,Closed 25 July 2025. Episode file from October 2016,Closed
+S08000029,Queen Margaret Hospital,F805H,KY120SU,Type 3,Episode,Changed from ED to MIU 19 January 2012. Started submitting episode level data in July 2007,Open
+S08000029,St Andrews Community Hospital,F709H,KY168AR,Type 3,Episode,Episode file from July 2017,Open
+S08000019,Forth Valley Royal Hospital,V217H,FK5 4WR,Type 1,Episode,"ED opened 12 July 2011. ED migrated across to TrakCare during April 2019, therefore the data submitted across this period may be subject to change or refinement as this migration evolves. As such, any data recorded across this period should be viewed in this context",Open
+S08000019,Stirling Health and Care Village,V201H,FK8 2AU,Type 3,Episode,"Until 12 July 2011 this was an ED when Stirling Royal Infirmary closed and Stirling Community Hospital (now Stirling Health and Care Village) opened as MIU. ED migrated across to TrakCare during April 2019, therefore the data submitted across this period may be subject to change or refinement as this migration evolves. As such, any data recorded across this period should be viewed in this context",Open
+S08000019,Falkirk Community Hospital,V102H,FK1 5QE,Type 3,Episode,MIU closed 12 July 2011,Closed
+S08000020,Aberdeen Royal Infirmary,N101H,AB252ZN,Type 1,Episode,Due to technical issues Aberdeen Royal Infirmary has two extra breaches recorded for the week ending 27 March 2022 than the actual number of breaches.   ,Open
+S08000020,Dr Gray's Hospital,N411H,IV301SN,Type 1,Episode,None,Open
+S08000020,Royal Aberdeen Children's Hospital,N121H,AB252ZG,Type 1,Episode,None,Open
+S08000020,Aboyne Hospital,N151H,AB345HQ,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000020,Chalmers Hospital,N337H,AB451JA,Type 3,Aggregate,None,Open
+S08000020,Fleming Cottage Hospital,N451H,AB389PR,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000020,Forres Health & Care Centre,N683C,IV361JG,Type 3,Aggregate,MIU opened 8 September 2014. Closed from April 2020.,Closed
+S08000020,Fraserburgh Hospital,N334H,AB439NF,Type 3,Aggregate,None,Open
+S08000020,Insch War Memorial Hospital,N332H,AB526JJ,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000020,Inverurie Hospital,N331H,AB513UL,Type 3,Aggregate,No data since February 2019.,Closed
+S08000020,Jubilee Hospital,N335H,AB548EX,Type 3,Aggregate,None,Open
+S08000020,Kincardine Community Hospital,N494H,AB392NJ,Type 3,Aggregate,Aggregate file from June 2012. Closed since April 2020.,Closed
+S08000020,Leanchoil Hospital,N434H,IV362RF,Type 3,Aggregate,MIU closed 07 September 2014,Closed
+S08000020,Peterhead Community Hospital,N333H,AB422XB,Type 3,Aggregate,None,Open
+S08000020,Seafield Hospital,N431H,AB561SF,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000020,Stephen Hospital,N432H,AB554BH,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000020,Turner Memorial Hospital,N433H,AB555DJ,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000020,Turriff Hospital,N336H,AB534DQ,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000031,Glasgow Royal Infirmary,G107H,G4  0SF,Type 1,Episode,None,Open
+S08000031,Inverclyde Royal Hospital,C313H,PA160XN,Type 1,Episode,None,Open
+S08000031,Royal Alexandra Hospital,C418H,PA2 9PN,Type 1,Episode,None,Open
+S08000031,Royal Hospital for Children Glasgow,G513H,G51 4TF,Type 1,Episode,Moved from Yorkhill to Queen Elizabeth University Hospital 10 June 2015 08:00 hrs.,Open
+S08000031,Queen Elizabeth University Hospital,G405H,G51 4TF,Type 1,Episode,Until 02 May 2015 08:00hrs Southern General Hospital when Queen Elizabeth Univeristy Hospital opened and Southern General Hospital closed. Re-named from Southern General University Hospital to Queen Elizabeth University Hospital on 03 July 2015.,Open
+S08000031,New Stobhill Hospital,G207H,G21 3UW,Type 3,Episode,"New Stobhill Hospital (formerly Stobhill Hospital), until 18 March 2011, this site had both an ED and MIU, and from 18 March 2011 there was no ED on site.",Open
+S08000031,Vale of Leven District General Hospital,C206H,G83 0UA,Type 3,Episode,None,Open
+S08000031,New Victoria Hospital,G306H,G42 9LF,Type 3,Episode,"New Victoria Hospital (formerly Victoria Infirmary), this site had an ED and an MIU up until 16 May 2015 at 08:00 hrs, when the ED closed and the site became an MIU only. From April 2020 until 13 July 2020, New Victoria Hospital was closed during the COVID-19 response.",Open
+S08000031,West Glasgow Ambulatory Care Hospital,G516H,G3 8SJ,Type 3,Episode,Until 30 May 2015 08:00hrs Western Infirmary /Garnavel General ED when MIU opened at West Glasgow Ambulatory Care Hospital and ED at Western Infirmary / Gartnavel General closed. Closed 23 December 2016 21:00 hrs. Re-Opened 03 January 2018 and Closed 20 April 2018.,Closed
+S08000022,Belford Hospital,H212H,PH336BS,Type 1,Episode,Episode file from March 2011,Open
+S08000022,Caithness General Hospital,H103H,KW1 5NS,Type 1,Episode,Episode file from March 2011,Open
+S08000022,Lorn & Islands Hospital,C121H,PA344HH,Type 1,Episode,Episode file from April 2012,Open
+S08000022,Raigmore Hospital,H202H,IV2 3UJ,Type 1,Episode,"From the 28th of May 2018, Raigmore hospital in NHS Highland trialled a new patient flow system. As a consequence the accuracy of some patients waits may have been effected between this date and the 4th of July, however the total number of attendances remains correct.",Open
+S08000022,Aviemore Health Centre,H227B,PH221SY,Type 3,Aggregate,None,Open
+S08000022,Campbeltown Hospital (2007-2009),C103B,PA286AT,Type 3,Aggregate,Campbeltown Hospital was mainly recorded under TreatmentLocation code C103B before 2010 and C122H from 2010 onwards. In July and August 2007 it was recorded under both C103B and C122H.,Closed
+S08000022,Campbeltown Hospital,C122H,PA286LE,Type 3,Aggregate,Campbeltown Hospital was mainly recorded under TreatmentLocation code C103B before 2010 and C122H from 2010 onwards. In July and August 2007 it was recorded under both C103B and C122H. NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,County Community Hospital - Invergordon,H219H,IV180JR,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Cowal Community Hospital,C106H,PA237RL,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Dunaros Hospital,C117J,PA726JF,Type 3,Aggregate,Closed in November 2012 - transfer of service to Mull and Iona Hospital,Closed
+S08000022,Dunbar Hospital,H101H,KW147XE,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Ian Charles Community Hospital,H210H,PH263HR,Type 3,Aggregate,Closed from April 2020.,Closed
+S08000022,Islay Hospital,C108H,PA437JD,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Lawson Memorial Hospital,H106H,KW106SS,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Dr Mackinnon Memorial Hospital,H214H,IV499AA,Type 3,Aggregate,Dr MacKinnon Memorial Hospital closed March 2022 with services moving to the new Broadford Hospital.  NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Closed
+S08000022,Broadford Hospital,H229H,IV499AA,Type 3,Aggregate,"Broadford Hospital opened March 2022, replacing the Dr MacKinnon Memorial Hospital. NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.",Open
+S08000022,Mid Argyll Community Hospital And Integrated Care Centre,H224H,PA318JZ,Type 3,Aggregate,Mid Argyll Community Hospital and Integrated Care Centre was recorded under TreatmentLocation code C110H before 2010 and H224H from 2010 onwards. NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Mid Argyll Hospital,C110H,PA318JZ,Type 3,Aggregate,Mid Argyll Community Hospital and Integrated Care Centre was recorded under TreatmentLocation code C110H before 2010 and H224H from 2010 onwards,Closed
+S08000022,Mull and Iona Community Hospital,H227H,PA656BH,Type 3,Aggregate,Opened from November 2012. NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Nairn Town and County Hospital,H208H,IV125EE,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Portree Community Hospital,H215H,IV519BZ,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000022,Ross Memorial Hospital,H217H,IV159QT,Type 3,Aggregate,Closed 02 November 2018.,Closed
+S08000022,Victoria Hospital (NHS Highland),C113H,PA209JJ,Type 3,Aggregate,NHS Highland - Some sites in NHS Highland which supply aggregate data have been unable to separate data on planned attendances from unplanned attendances. This issue will affect NHS Highland s total attendance figure by around 1-4% per month and has a negligible effect on Scotland s total attendances. From September 2021 some of these sites will move to only providing new and unplanned data.,Open
+S08000032,University Hospital Hairmyres,L302H,G75 8RG,Type 1,Episode,NHS Lanarkshire - The health board transferred to a new patient management system during March 2011. There was an issue with the new system that prevented the recording of different attendance categories from March to June 2011. This resulted in the attendance figures for the three EDs from March to June 2011 being artificially inflated by approximately 5.0 % (estimated from the prior 12 month s data). Please interpret the attendances and the associated rates from this time period with caution.,Open
+S08000032,University Hospital Monklands,L106H,ML6 0JS,Type 1,Episode,NHS Lanarkshire - The health board transferred to a new patient management system during March 2011. There was an issue with the new system that prevented the recording of different attendance categories from March to June 2011. This resulted in the attendance figures for the three EDs from March to June 2011 being artificially inflated by approximately 5.0 % (estimated from the prior 12 month s data). Please interpret the attendances and the associated rates from this time period with caution.,Open
+S08000032,University Hospital Wishaw,L308H,ML2 0DP,Type 1,Episode,NHS Lanarkshire - The health board transferred to a new patient management system during March 2011. There was an issue with the new system that prevented the recording of different attendance categories from March to June 2011. This resulted in the attendance figures for the three EDs from March to June 2011 being artificially inflated by approximately 5.0 % (estimated from the prior 12 month s data). Please interpret the attendances and the associated rates from this time period with caution.,Open
+S08000032,Kello Hospital,L206H,ML126AF,Type 3,Episode,Episode file from March 2019. Closed from April 2020.,Closed
+S08000032,Lady Home Hospital,L207H,ML110RH,Type 3,Episode,Episode file from March 2019. Closed from April 2020.,Closed
+S08000024,Royal Hospital for Children and Young People (Edinburgh),S319H,EH164TJ,Type 1,Episode,As of 08:00 hrs on 23 March 2021 Royal Hospital For Sick Children Edinburgh (S225H) moved to a new location has is now named Royal Hospital for Children and Young People and has an updated hospital code of S319H,Open
+S08000024,Royal Infirmary of Edinburgh,S314H,EH164SA,Type 1,Episode,None,Open
+S08000024,St John's Hospital,S308H,EH546PP,Type 1,Episode,None,Open
+S08000024,Belhaven Hospital,S102H,EH421TR,Type 3,Aggregate,Opened from December 2007. Closed October 2012,Closed
+S08000024,Edington Cottage Hospital,S108H,EH394PU,Type 3,Aggregate,"Opened from December 2007. Closed as MIU, no data since August 2021",Closed
+S08000024,Western General Hospital,S116H,EH4 2XU,Type 3,Episode,MIU and Acute Receiving Unit (ARU) on site,Open
+S08000025,Balfour Hospital,R103H,KW151NZ,Type 1,Episode,Episode file from June 2011. Changed to ED 01 January 2014.,Open
+S08000026,Gilbert Bain Hospital,Z102H,ZE1 0TB,Type 1,Episode,None,Open
+S08000030,Ninewells Hospital,T101H,DD1 9SY,Type 1,Episode,"ED migrated across to TrakCare from Symphony during June 2017, therefore the data submitted across this period may be subject to change or refinement as this migration evolves. As such, any data recorded across this period should be viewed in this context.",Open
+S08000030,Perth Royal Infirmary,T202H,PH1 1NX,Type 1,Episode,"ED migrated across to TrakCare from Symphony during June 2017, therefore the data submitted across this period may be subject to change or refinement as this migration evolves. As such, any data recorded across this period should be viewed in this context.",Open
+S08000030,Aberfeldy Community Hospital,T207H,PH152DH,Type 3,Episode,Opened from September 2008. Closed November 2015.,Closed
+S08000030,Arbroath Infirmary,T304H,DD112AT,Type 3,Episode,None,Open
+S08000030,Blairgowrie Community Hospital,T209H,PH106EE,Type 3,Episode,Closed from April 2020.,Closed
+S08000030,Brechin Infirmary,T305H,DD9 7AN,Type 3,Episode,Closed from April 2020.,Closed
+S08000030,Crieff Community Hospital,T316H,PH7 3HR,Type 3,Episode,Opened from September 2008. Episode file from November 2008. Closed since April 2020.,Closed
+S08000030,Irvine Memorial Hospital,T208H,PH165HP,Type 3,Episode,Closed from July 2008,Closed
+S08000030,Links Health Centre - Montrose,T357C,DD108TY,Type 3,Episode,Closed from April 2020.,Closed
+S08000030,Pitlochry Community Hospital,T320H,PH165FG,Type 3,Episode,Closed from April 2020.,Closed
+S08000030,St Margaret's Hospital,T205H,PH3 1JH,Type 3,Episode,Opened from September 2008. Closed since April 2020.,Closed
+S08000030,Whitehills Health and Community Care Centre,T319H,DD8 3DY,Type 3,Episode,None,Open
+S08000028,Western Isles Hospital,W107H,HS1 2AF,Type 1,Episode,None,Open
+S08000028,St Brendan's Hospital,W106H,HS9 5XE,Type 3,Aggregate,None,Open
+S08000028,Uist & Barra Hospital,W108H,HS7 5LA,Type 3,Episode,None,Open
