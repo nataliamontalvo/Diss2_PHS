@@ -1,0 +1,43 @@
+---
+title: "PHS Risk Analysis"
+author: "Natalia"
+date: "2026-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+source("R/prep.R")
+source("R/merge_data.R")
+
+# Make sure the figure output folders exist
+dir.create("figures/risk_model", recursive = TRUE, showWarnings = FALSE)
+```
+
+
+```{r}
+risk_model_data <- risk_model_data %>%
+  filter(!is.na(population), population > 0) %>%
+  mutate(
+    # months since first observation
+    t = interval(min(m_date), m_date) %/% months(1),
+    
+    # categorical variables as factors
+    Age = factor(Age),
+    Sex = factor(Sex),
+    Deprivation = factor(Deprivation),
+    HBT = factor(HBT))
+
+model_r1 <- gam(NumberOfAttendances ~ Age + Sex + Deprivation +
+                     s(t, k = 15) +
+                     s(m_num, bs = "cc", k = 12) +
+                     s(HBT, bs = "re") +
+                     offset(log(population)),  # attendance rate
+                   family = nb(),
+                   method = "REML",
+                   data = risk_model_data)
+
+summary(model_r1)
+gam.check(model_r1)
+```
+
