@@ -211,25 +211,10 @@ pop_hb_density <- pop_data_t4 %>%
          area_km2 = 5,     # "Area (square kilometres)" - 5th column
          density = 6)      # "Population density ..." - 6th column
 
+
 # SIMD: indicators (income, employment, crime, education, housing, etc.)
 #   aggregated from data zone level up to HB x deprivation quintile, using a
 #   population weighted mean so each data zone contributes proportionally to
 #   its actual population rather than being treated as equally sized.
 
-simd_joined <- simd_ind %>%
-  left_join(
-    simd_main %>% select(DataZone, HB, Quintile = SIMD2020V2CountryQuintile),
-    by = c("Data_Zone" = "DataZone")
-  )
-
-hb_quintile_indicators <- simd_joined %>%
-  group_by(HB, Quintile) %>%
-  summarise(
-    across(
-      where(is.numeric) & !c(Total_population),
-      ~ weighted.mean(.x, w = Total_population, na.rm = TRUE)
-    ),
-    quintile_population = sum(Total_population, na.rm = TRUE),
-    .groups = "drop"
-  )
 

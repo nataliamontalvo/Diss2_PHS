@@ -28,6 +28,12 @@ risk_model_data <- risk_model_data %>%
     Deprivation = factor(Deprivation),
     HBT = factor(HBT))
 
+summarise_columns(risk_model_data)
+
+```
+
+
+```{r}
 model_r1 <- gam(NumberOfAttendances ~ Age + Sex + Deprivation +
                      s(t, k = 15) +
                      s(m_num, bs = "cc", k = 12) +

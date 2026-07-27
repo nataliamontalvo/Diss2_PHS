@@ -1034,5 +1034,9 @@ ggplot(weekend_trend, aes(x = m_date, y = total, colour = Week)) +
   theme_phs()
 ```
 
+# SIMD data 
 
+```{r}
+summarise_columns(simd_main)
+```
 

@@ -11,6 +11,32 @@
 
 source("R/prep.R")
 
+# Merge SIMD data sets by Data Zone, after agregatTe them by HB
+
+# Select specific columns:
+
+simd_ind <- simd_ind %>%
+  select(Data_Zone, , Quintile = SIMD2020V2CountryQuintile)
+
+simd_joined <- simd_ind %>%
+  left_join(
+    simd_main %>% select(HB, CA, Quintile = SIMD2020V2CountryQuintile),
+    by = c("Data_Zone" = "DataZone")
+  )
+
+hb_quintile_indicators <- simd_joined %>%
+  group_by(HB, Quintile) %>%
+  summarise(
+    across(
+      where(is.numeric) & !c(Total_population),
+      ~ weighted.mean(.x, w = Total_population, na.rm = TRUE)
+    ),
+    quintile_population = sum(Total_population, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+
 # 1. Risk model data ----------------------------------------------------------
 
 # Referral data by HB month 
