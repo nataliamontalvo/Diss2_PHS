@@ -5,39 +5,50 @@
 #
 # Purpose:
 #   Build datasets to be used for modelling:
+#     1. Merge SIMD
+#     2. Build Risk 
+#     3. Build Discharge
 #
 # Note: This script should be run after source("R/prep.R")
 # =============================================================================
 
 source("R/prep.R")
 
-# Merge SIMD data sets by Data Zone, after agregatTe them by HB
+# 1. Merged SIMD data ----------------------------------------------------------
 
-# Select specific columns:
-
-simd_ind <- simd_ind %>%
-  select(Data_Zone, , Quintile = SIMD2020V2CountryQuintile)
-
+# Merge SIMD data sets by Data Zone
 simd_joined <- simd_ind %>%
   left_join(
-    simd_main %>% select(HB, CA, Quintile = SIMD2020V2CountryQuintile),
-    by = c("Data_Zone" = "DataZone")
-  )
+    simd_main %>% select(DataZone, HB, CA, 
+                         Quintile = SIMD2020V2CountryQuintile),
+    by = c("Data_Zone" = "DataZone"))
 
-hb_quintile_indicators <- simd_joined %>%
+# Aggregate datasets by HB and quintile
+simd_hb <- simd_joined %>%
   group_by(HB, Quintile) %>%
   summarise(
-    across(
-      where(is.numeric) & !c(Total_population),
-      ~ weighted.mean(.x, w = Total_population, na.rm = TRUE)
-    ),
+    # Population totals
     quintile_population = sum(Total_population, na.rm = TRUE),
+    quintile_working_age_population = sum(Working_age_population, na.rm = TRUE),
+    n_data_zones = n_distinct(Data_Zone),
+    
+    # Income, employment and housing counts: kept as sums
+    Income_count = sum(Income_count, na.rm = TRUE),
+    Employment_count = sum(Employment_count, na.rm = TRUE),
+    across(c(crime_count, overcrowded_count, nocentralheat_count),
+           ~ sum(.x, na.rm = TRUE)),
+    
+    # Rate, ratio and travel time indicators: population-weighted mean
+    across(c(Income_rate, Employment_rate, CIF, ALCOHOL, DRUG, SMR, DEPRESS,
+             LBWT, EMERG, Attendance, Attainment, no_qualifications,
+             not_participating, University, crime_rate,
+             starts_with("drive_"), starts_with("PT_"), Broadband),
+           ~ weighted.mean(.x, w = Total_population, na.rm = TRUE)),
+    
     .groups = "drop"
   )
 
-
-
-# 1. Risk model data ----------------------------------------------------------
+# 2. Risk model data ----------------------------------------------------------
 
 # Referral data by HB month 
 

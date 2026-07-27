@@ -6,6 +6,11 @@
 # Purpose:
 #   Set up the R environment, define reusable helper functions, import the raw
 #   datasets, and carry out cleaning steps required by later analyses.
+#     1. Load packages used across the project ...
+#     2. Define helper functions: ...
+#     3. Import raw data
+#     4. Initial checks of the datasets
+#     5. Clenaing of the datasets
 #
 # Note: This script should be run before the analysis scripts.
 # =============================================================================
@@ -191,8 +196,7 @@ when_data <- when_data %>%
          year   = format(m_date, "%Y"),
          m_num  = as.integer(format(m_date, "%m")))
 
-# Population Table 1: filter to health board level, reshape wide age columns
-#   to long, and bin into the same age bands used in month_demo_data
+# Population Table 1: filter to health board level
 pop_hb_age_sex <- pop_data_t1 %>%
   filter(`Area type` == "Health board") %>%
   pivot_longer(cols = `0`:`90 and over`,
@@ -210,11 +214,4 @@ pop_hb_density <- pop_data_t4 %>%
          population = 4,   # "Estimated population 30 June 2024" - 4th column
          area_km2 = 5,     # "Area (square kilometres)" - 5th column
          density = 6)      # "Population density ..." - 6th column
-
-
-# SIMD: indicators (income, employment, crime, education, housing, etc.)
-#   aggregated from data zone level up to HB x deprivation quintile, using a
-#   population weighted mean so each data zone contributes proportionally to
-#   its actual population rather than being treated as equally sized.
-
 

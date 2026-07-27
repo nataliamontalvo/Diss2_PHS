@@ -11,6 +11,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # All package loading, helper functions, data import and cleaning happens in
 # prep.R file 
 source("R/prep.R")
+source("R/merge_data.R")
 
 # Make sure the figure output folders exist
 dir.create("figures/eda", recursive = TRUE, showWarnings = FALSE)
@@ -942,6 +943,52 @@ att_freq_age_plot
 
 Similar accross age groups
 
+```{r}
+# Self-referral share vs. frequent-attendance share, by health board
+
+
+# mul_att_data covers a single 12-month window ending April 2026 - referrals
+# filtered to roughly the same period so the comparison is like-for-like
+freq_rate_by_hb <- mul_att_long %>%
+  group_by(HBT) %>%
+  summarise(
+    total_patients = sum(n_patients, na.rm = TRUE),
+    freq_patients = sum(n_patients[attendance_freq == "5+"], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(freq_pct = freq_patients / total_patients * 100)
+
+referral_mix_by_hb <- referrals_data %>%
+  filter(m_date >= as.Date("2025-05-01"), m_date <= as.Date("2026-04-01")) %>%
+  group_by(HBT) %>%
+  summarise(
+    total = sum(NumberOfAttendances, na.rm = TRUE),
+    self_referral = sum(NumberOfAttendances[Referral == "Self Referral"], na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(self_referral_pct = self_referral / total * 100)
+
+ecological_compare <- freq_rate_by_hb %>%
+  left_join(referral_mix_by_hb, by = "HBT")
+
+self_referral_freq_plt <- ggplot(ecological_compare,
+                                  aes(x = self_referral_pct, y = freq_pct, label = HBT)) +
+  geom_point(size = 3, colour = phs_colours("phs-blue")) +
+  geom_smooth(method = "lm", se = TRUE, colour = phs_colours("phs-rust")) +
+  labs(x = "Self-Referral Share (%)", y = "Frequent Attender Share (%)",
+       title = "Self-Referral Rate vs. Frequent Attendance Rate, by Health Board",
+       caption = "Ecological (area-level) comparison across 14 health boards - not a patient-level relationship") +
+  theme_phs() +
+  theme(plot.caption = element_text(size = 8, hjust = 0, colour = "grey40"))
+
+self_referral_freq_plt
+
+ggsave("figures/eda/self_referral_vs_frequent_attendance.pdf",
+       plot = self_referral_freq_plt, width = 8, height = 5)
+```
+
+not a strong relationship, wide CI and poitns scattered. 
+
 # 8. When attendance
 ```{r}
 summarise_columns(when_data)
@@ -1034,9 +1081,39 @@ ggplot(weekend_trend, aes(x = m_date, y = total, colour = Week)) +
   theme_phs()
 ```
 
-# SIMD data 
+# 9. SIMD data 
+
+## 9.1 SIMD main
 
 ```{r}
 summarise_columns(simd_main)
+```
+
+## 9.2 SIMD indicators
+
+Income_rate and Employment_rate are proportions (0-1 scale), not percentages
+
+
+## 9.3 Checks
+
+ Check after agregagating by HB both simd datasets
+```{r}
+# Some checks after agregation:
+nrow(simd_hb)
+n_distinct(simd_hb$HB)
+
+sum(simd_hb$n_data_zones)
+nrow(simd_ind)
+
+sum(simd_hb$quintile_population)
+sum(pop_hb_density$population)
+100-(sum(simd_hb$quintile_population)*100/sum(pop_hb_density$population))
+# Drop about 2.2% 
+
+simd_hb %>%
+  group_by(Quintile) %>%
+  summarise(across(c(Income_rate, Employment_rate, crime_rate, ALCOHOL, DRUG), 
+                   \(x) mean(x, na.rm = TRUE)))
+# All decrease
 ```
 
