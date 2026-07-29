@@ -83,6 +83,19 @@ bin_age <- function(age_year) {
   )
 }
 
+# Sum a vector, return NA (not 0) if every value in the group is NA.
+sum_or_na <- function(x) {
+  if (all(is.na(x))) NA_real_ else sum(x, na.rm = TRUE)
+}
+
+# Compute a weighted mean, rows where both the value and its weight are non 
+# missing and the weight is positive, returning NA if no valid rows remain.
+weighted_mean_or_na <- function(x, w) {
+  valid <- !is.na(x) & !is.na(w) & w > 0
+  if (!any(valid)) return(NA_real_)
+  weighted.mean(x[valid], w[valid])
+}
+
 # 3. Import raw data ----------------------------------------------------------
 
 # Monthly attendance counts by demographic group
@@ -110,11 +123,15 @@ mul_att_data <- read.csv("data/opendata_monthly_ae_multiple_attendances_demograp
 when_data <- read.csv("data/opendata_monthly_ae_when_202604.csv")
 
 # Population data by health board, age and sex
-pop_data_t1 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx", 
+pop_data_t1 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx",
                                sheet = 4, skip = 3)
-# Population density by health board 
-pop_data_t4 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx", 
+# Population density by health board
+pop_data_t4 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx",
                                sheet = 7, skip = 3)
+
+# Population data by data zone, age and sex 
+pop_data <- read.csv("data/dz2011-pop-est_24022026.csv")
+
 
 # SIMD main (Data Zone, HB, quintile)
 simd_main <- read.csv("data/simd2020v2_22062020.csv")
@@ -136,6 +153,7 @@ summarise_columns(mul_att_data)
 summarise_columns(when_data)
 summarise_columns(pop_data_t1)
 summarise_columns(pop_data_t4)
+summarise_columns(pop_data)
 summarise_columns(simd_main)
 summarise_columns(simd_ind)
 
@@ -196,22 +214,23 @@ when_data <- when_data %>%
          year   = format(m_date, "%Y"),
          m_num  = as.integer(format(m_date, "%m")))
 
-# Population Table 1: filter to health board level
-pop_hb_age_sex <- pop_data_t1 %>%
-  filter(`Area type` == "Health board") %>%
-  pivot_longer(cols = `0`:`90 and over`,
-               names_to = "age_year", values_to = "population") %>%
-  mutate(age_year = as.integer(gsub("[^0-9]", "", age_year)),
+# Population by health board, age and sex, aggregated by HB (via the Data Zone 
+# to HB mapping in simd_main)
+pop_hb_age_sex <- pop_data %>%
+  mutate(Sex = trimws(Sex)) %>%
+  filter(Year == 2020, Sex %in% c("Male", "Female"), DataZone != "S92000003") %>%
+  left_join(simd_main %>% select(DataZone, HB), by = "DataZone") %>%
+  pivot_longer(cols = Age0:Age90plus, names_to = "age_col", values_to = "population") %>%
+  mutate(age_year = as.integer(gsub("[^0-9]", "", age_col)),
          Age = bin_age(age_year)) %>%
-  group_by(`Area code`, Sex, Age) %>%
-  summarise(population = sum(population, na.rm = TRUE), .groups = "drop") %>%
-  rename(HB = `Area code`)
+  group_by(HB, Sex, Age) %>%
+  summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
 
 # Population Table 4: filter to health board level, keep just HB + density
 pop_hb_density <- pop_data_t4 %>%
   filter(`Area type` == "Health board") %>%
   select(HB = `Area code`,
-         population = 4,   # "Estimated population 30 June 2024" - 4th column
-         area_km2 = 5,     # "Area (square kilometres)" - 5th column
-         density = 6)      # "Population density ..." - 6th column
+         population = 4,   # "Estimated population"
+         area_km2 = 5,     # "Area (square km)"
+         density = 6)      # "Population density"
 

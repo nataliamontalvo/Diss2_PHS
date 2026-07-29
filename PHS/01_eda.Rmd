@@ -11,7 +11,8 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # All package loading, helper functions, data import and cleaning happens in
 # prep.R file 
 source("R/prep.R")
-source("R/merge_data.R")
+source("R/risk_model_data.R")
+source("R/discharge_model_data.R")
 
 # Make sure the figure output folders exist
 dir.create("figures/eda", recursive = TRUE, showWarnings = FALSE)
@@ -495,12 +496,46 @@ ggsave("figures/eda/top10_location_trend_overlay.pdf", plot = top10_trend_overla
 
 # 4. Population data
 
-`pop_hb_age_sex`, `pop_hb_density` and `hb_quintile_population` are already built by `prep.R` from the raw population/SIMD files
+```{r}
+head(pop_data)
+summarise_columns(pop_data)
+```
+
+```{r}
+distinct(pop_data, Sex)
+
+n_distinct(pop_data$DataZone)   # should be 6976, per the dataset description
+# Confirm
+pop_data %>% filter(DataZoneQF != "" | !is.na(DataZoneQF)) %>% 
+  distinct(DataZone, DataZoneQF)
+n_distinct(simd_ind$Data_Zone)             # compare against what you already validated
+
+setdiff(unique(pop_data$DataZone), unique(simd_main$DataZone))
+setdiff(unique(simd_main$DataZone), unique(pop_data$DataZone))
+```
+
+
+```{r}
+national_total_new <- pop_data %>%
+  mutate(Sex = trimws(Sex)) %>%
+  filter(Year == 2020, Sex != "All", DataZone != "S92000003")
+
+sum(national_total_new$AllAges, na.rm = TRUE)
+
+# Compare against:
+sum(pop_hb_density$population)      # your NRS mid-2024 estimate
+sum(simd_hb$quintile_population)    # your SIMD 2020 population
+```
+
+
+
+
+
 
 ```{r}
 head(pop_hb_age_sex)
 head(pop_hb_density)
-head(hb_quintile_indicators)
+head(simd_hb)
 ```
 
 Sex: person (all), female and male
@@ -508,19 +543,9 @@ Area type: Scotland (all), council area, HB
 
 ```{r}
 population_pyramid_data <- pop_hb_age_sex %>%
-  filter(Sex != "Persons") %>%
   group_by(Age, Sex) %>%
-  summarise(
-    population = sum(population, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    plot_population = if_else(
-      Sex %in% c("Male", "Males"),
-      -population,
-      population
-    )
-  )
+  summarise(population = sum(population, na.rm = TRUE), .groups = "drop") %>%
+  mutate(plot_population = if_else(Sex == "Male", -population, population))
 
 population_pyramid_plt <- ggplot(
   population_pyramid_data,
@@ -548,7 +573,6 @@ ggsave("figures/eda/population_pyramid.pdf", plot = population_pyramid_plt,
 ```{r}
 # Population by age group and sex, nationally
 pop_age_sex_plt <- pop_hb_age_sex %>%
-  filter(Sex != "Persons") %>%
   group_by(Age, Sex) %>%
   summarise(population = sum(population, na.rm = TRUE), .groups = "drop") %>%
   ggplot(aes(x = Age, y = population, fill = Sex)) +
@@ -584,12 +608,6 @@ attendance_age_sex <- month_demo_data %>%
   summarise(total_attendances = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
 
 population_age_sex <- pop_hb_age_sex %>%
-  filter(Sex != "Persons") %>%
-  mutate(Sex = case_when(
-    Sex == "Males" ~ "Male",
-    Sex == "Females" ~ "Female",
-    TRUE ~ Sex
-  )) %>%
   group_by(Age, Sex) %>%
   summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
 
@@ -1093,27 +1111,17 @@ summarise_columns(simd_main)
 
 Income_rate and Employment_rate are proportions (0-1 scale), not percentages
 
+```{r}
+summarise_columns(simd_ind)
+```
 
 ## 9.3 Checks
 
  Check after agregagating by HB both simd datasets
 ```{r}
-# Some checks after agregation:
-nrow(simd_hb)
-n_distinct(simd_hb$HB)
-
-sum(simd_hb$n_data_zones)
-nrow(simd_ind)
-
-sum(simd_hb$quintile_population)
-sum(pop_hb_density$population)
-100-(sum(simd_hb$quintile_population)*100/sum(pop_hb_density$population))
-# Drop about 2.2% 
-
 simd_hb %>%
   group_by(Quintile) %>%
-  summarise(across(c(Income_rate, Employment_rate, crime_rate, ALCOHOL, DRUG), 
-                   \(x) mean(x, na.rm = TRUE)))
-# All decrease
+  summarise(across(c(Income_rate, Employment_rate, crime_rate, ALCOHOL, DRUG),
+                    \(x) mean(x, na.rm = TRUE)))
 ```
 
