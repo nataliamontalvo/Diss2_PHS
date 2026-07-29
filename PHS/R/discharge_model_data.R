@@ -1,11 +1,15 @@
 
 # =============================================================================
-# Build discharge model data
+# Build admission model data
 # =============================================================================
 #
 # Purpose:
-#   Build Build discharge_model_data, at grain Month x HB x TreatmentLocation x
-#   DepartmentType x Age.
+#   Build the admission model data for Step 2: given that someone has already
+#   attended A&E, what factors predict whether they are admitted to hospital?
+#
+#   Two admission definitions are built for sensitivity comparison:
+#     - Narrow: "Admission to same Hospital" only
+#     - Broad:  also includes "Transferred to Other Hospital/Service"
 #
 # Note: This script sources risk_model_data.R (which itself sources prep.R) to 
 # reuse simd_hb.
@@ -18,6 +22,7 @@ source("R/risk_model_data.R")
 
 # Referral data by site, month and age
 referral_wide_site_age <- referrals_data %>%
+  filter(!is.na(Age), Age != "") %>%
   group_by(Month, HBT, TreatmentLocation, DepartmentType, Age, Referral) %>%
   summarise(referral_total = sum(NumberOfAttendances, na.rm = TRUE),
             .groups = "drop") %>%
@@ -46,6 +51,10 @@ when_site_monthly <- when_data %>%
          weekend_pct)
 
 
+# 2. Admission outcome --------------------------------------------------------
+
+admission_labels <- c("Admission to same Hospital")
+
 # HB level SIMD indicators
 hb_indicators_board_level <- simd_hb %>%
   group_by(HB) %>%
@@ -56,81 +65,79 @@ hb_indicators_board_level <- simd_hb %>%
     .groups = "drop"
   )
 
-
-# 3. Model 1a - age/sex risk model data ----------------------------------------
-
-# Grain: Month x HB x Age x Sex. Deprivation summed 
-age_sex_model_data <- month_demo_data %>%
-  group_by(Month, m_date, year, m_num, HBT, Age, Sex) %>%
-  summarise(NumberOfAttendances = sum(NumberOfAttendances, na.rm = TRUE),
-            .groups = "drop") %>%
-  mutate(t = as.numeric(m_date - min(m_date)) / 30) %>%
-  left_join(
-    pop_hb_age_sex %>%
-      mutate(Sex = case_when(
-        Sex == "Males" ~ "Male",
-        Sex == "Females" ~ "Female",
-        TRUE ~ Sex
-      )),
-    by = c("HBT" = "HB", "Age", "Sex")
-  ) %>%
-  left_join(simd_hb_overall, by = c("HBT" = "HB")) %>%
-  left_join(when_hb_monthly, by = c("Month", "HBT")) %>%
-  left_join(referral_hb_monthly, by = c("Month", "HBT"))
-
-
-# 4. Model 1b - deprivation risk model data ------------------------------------
-
-# Grain: Month x HB x Deprivation. Age/Sex summed away. Offset uses
-# simd_hb$quintile_population, which exactly matches this grain, and
-# quintile-specific SIMD indicators (Income_rate, crime_rate, etc.) can be
-# used directly as predictors since they're already at the same resolution.
-deprivation_model_data <- month_demo_data %>%
-  filter(!is.na(Deprivation)) %>%
-  group_by(Month, m_date, year, m_num, HBT, Deprivation) %>%
-  summarise(NumberOfAttendances = sum(NumberOfAttendances, na.rm = TRUE),
-            .groups = "drop") %>%
-  mutate(t = as.numeric(m_date - min(m_date)) / 30) %>%
-  left_join(simd_hb, by = c("HBT" = "HB", "Deprivation" = "Quintile")) %>%
-  left_join(when_hb_monthly, by = c("Month", "HBT")) %>%
-  left_join(referral_hb_monthly, by = c("Month", "HBT"))
-
-# 5. Model 2 - discharge model data -------------------------------------------
-
-# NOTE: confirm admission_labels against distinct(discharges_data, Discharge)
-# before trusting this - see project notes on narrow vs broad admission
-# definition (same-hospital admission only, vs including transfers)
-admission_labels <- c("Admission to same Hospital")
-
 discharge_wide <- discharges_data %>%
-  group_by(Month, HBT, TreatmentLocation, DepartmentType, Age) %>%
+  group_by(Month, m_date, year, m_num, HBT, TreatmentLocation,
+           DepartmentType, Age) %>%
   summarise(
     total_attendances = sum(NumberOfAttendances, na.rm = TRUE),
     admitted = sum(NumberOfAttendances[Discharge %in% admission_labels],
                    na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(not_admitted = total_attendances - admitted)
+    .groups = "drop") %>%
+  mutate(not_admitted = total_attendances - admitted,
+         t = as.numeric(m_date - min(m_date)) / 30)
 
-discharge_model_data <- discharge_wide %>%
+# Broad definition: including transfers
+admission_labels_broad <- c("Admission to same Hospital",
+                            "Transferred to Other Hospital/Service")
+
+discharge_wide_broad <- discharges_data %>%
+  group_by(Month, m_date, year, m_num, HBT, TreatmentLocation,
+           DepartmentType, Age) %>%
+  summarise(
+    total_attendances = sum(NumberOfAttendances, na.rm = TRUE),
+    admitted = sum(NumberOfAttendances[Discharge %in% admission_labels_broad],
+                   na.rm = TRUE),
+    .groups = "drop") %>%
+  mutate(not_admitted = total_attendances - admitted,
+    t = as.numeric(m_date - min(m_date)) / 30)
+
+# 3. Admission model data -----------------------------------------------------
+
+# Narrow definition
+admission_model_data <- discharge_wide %>%
   left_join(referral_wide_site_age,
             by = c("Month", "HBT", "TreatmentLocation", "DepartmentType",
                    "Age")) %>%
-  left_join(when_site_monthly,
-            by = c("Month", "HBT", "TreatmentLocation", "DepartmentType")) %>%
-  left_join(hb_indicators_board_level, by = c("HBT" = "HB")) %>%
+  left_join(when_site_monthly, by = c("Month", "HBT", "TreatmentLocation", 
+                                      "DepartmentType")) %>%
+  left_join(simd_hb_overall, by = c("HBT" = "HB")) %>%
   left_join(trt_loc, by = c("TreatmentLocation" = "TreatmentLocationCode"))
 
+# Broad definition (for sensitivity comparison)
+admission_model_data_broad <- discharge_wide_broad %>%
+  left_join(referral_wide_site_age, by = c("Month", "HBT", "TreatmentLocation", 
+                                           "DepartmentType","Age")) %>%
+  left_join(when_site_monthly, by = c("Month", "HBT", "TreatmentLocation", 
+                                      "DepartmentType")) %>%
+  left_join(simd_hb_overall, by = c("HBT" = "HB")) %>%
+  left_join(trt_loc, by = c("TreatmentLocation" = "TreatmentLocationCode"))
 
-# 6. Quick checks ---------------------------------------------------------------
+# 4. Checks -------------------------------------------------------------------
 
-# Age/sex model: rows with no population match
-age_sex_model_data %>% filter(is.na(population)) %>% distinct(Age, Sex)
+# admitted should never exceed total_attendances under either definition
+admission_model_data %>% filter(admitted > total_attendances) %>% nrow()
+admission_model_data_broad %>% filter(admitted > total_attendances) %>% nrow()
 
-# Deprivation model: rows with no quintile_population match
-deprivation_model_data %>% filter(is.na(quintile_population)) %>% distinct(Deprivation)
+# Row counts and missing data summary
+admission_model_data %>%
+  summarise(n_rows = n(),
+            n_missing_referral = sum(is.na(`pct_ref_Self Referral`)),
+            n_missing_when = sum(is.na(oohours_pct)),
+            n_missing_simd = sum(is.na(Income_rate)))
 
-# Discharge model: admitted should never exceed total_attendances
-discharge_model_data %>% filter(admitted > total_attendances) %>% nrow()
+# Duplicate check - each Month x HBT x TreatmentLocation x DepartmentType x
+# Age should appear exactly once
+admission_model_data %>%
+  count(Month, HBT, TreatmentLocation, DepartmentType, Age) %>%
+  filter(n > 1)
+                                                                                                                    
+# Quick look at admission rates under both definitions
+admission_model_data %>%
+  summarise(total_attendances = sum(total_attendances),
+            admitted_narrow = sum(admitted),
+            pct_narrow = admitted_narrow/total_attendances * 100)
 
-
+admission_model_data_broad %>%
+  summarise(total_attendances = sum(total_attendances),
+            admitted_broad = sum(admitted),
+            pct_broad = admitted_broad/total_attendances * 100)

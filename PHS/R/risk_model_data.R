@@ -88,8 +88,6 @@ referral_hb_monthly <- referrals_data %>%
   pivot_wider(names_from = Referral, values_from = referral_pct,
               values_fill = 0, names_prefix = "pct_ref_")
 
-head(referral_hb_monthly)
-
 # Referrals data by HB, month and age
 referral_hb_age_monthly <- referrals_data %>%
   filter(!is.na(Age), Age != "") %>%
@@ -117,10 +115,16 @@ when_hb_monthly <- when_data %>%
          weekend_pct = weekend / total * 100) %>%
   select(Month, HBT, oohours_pct, weekend_pct)
 
+# HB level population by age and sex
+pop_hb_age_sex <- pop_dz %>%
+  filter(Year == max(Year)) %>%
+  left_join(simd_main %>% select(DataZone, HB), by = "DataZone") %>%
+  group_by(HB, Sex, Age) %>%
+  summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
+
 
 # 3. Age/sex risk model data --------------------------------------------------
 
-## 3.1 Dataset: Month x HB x Age x Sex
 ## 3.1 Dataset: Month x HB x Age x Sex
 age_sex_model_data <- month_demo_data %>%
   
@@ -179,53 +183,66 @@ missing_combos
 
 ## 5.1 Dataset: Month x HB x Age x Sex x Deprivation
 
-# Built directly from pop_data (Data Zone x Age x Sex population), joined to 
+# Built directly from pop_dz (Data Zone x Age x Sex population), joined to 
 # its SIMD quintile via simd_main, then aggregated up to HB x Quintile x Age x 
-# Sex. Using the data avilable from 2020 as the simd data is from htat year aswell
-true_pop_hb_age_sex_quintile <- pop_data %>%
-  mutate(Sex = trimws(Sex)) %>%
-  filter(Year == 2020, Sex %in% c("Male", "Female"), DataZone != "S92000003") %>%
-  left_join(simd_main %>% select(DataZone, HB, Quintile = SIMD2020V2CountryQuintile),
+# Sex. Population itself varies by year, so each attendance month's count is 
+# offset by the correct year's population. For 2025 and 2026 attendance data 
+# the most recent available year (2024) is used as a documented fallback.
+
+# Year-varying population by HB x Quintile x Age x Sex
+max_pop_year <- max(pop_dz_age_sex$Year)
+# c
+
+pop_hb_age_sex_quintile_year <- pop_dz %>%
+  left_join(simd_main %>% select(DataZone, HB, 
+                                 Quintile = SIMD2020V2CountryQuintile),
             by = "DataZone") %>%
-  pivot_longer(cols = Age0:Age90plus, names_to = "age_col", values_to = "population") %>%
-  mutate(age_year = as.integer(gsub("[^0-9]", "", age_col)),
-         Age = bin_age(age_year)) %>%
-  group_by(HB, Quintile, Age, Sex) %>%
+  group_by(HB, Quintile, Age, Sex, Year) %>%
   summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
 
 combined_model_data <- month_demo_data %>%
   filter(Deprivation %in% 1:5, !is.na(Age), Age != "",
          Sex %in% c("Male", "Female")) %>%
-  group_by(Month, m_date, year, m_num, HBT, Age, Sex, Deprivation) %>%
+  mutate(pop_year = pmin(as.integer(year), max_pop_year)) %>%
+  group_by(Month, m_date, year, m_num, HBT, Age, Sex, Deprivation, pop_year) %>%
   summarise(NumberOfAttendances = sum(NumberOfAttendances, na.rm = TRUE),
             .groups = "drop") %>%
   mutate(t = as.numeric(m_date - min(m_date)) / 30) %>%
-  left_join(true_pop_hb_age_sex_quintile,
-            by = c("HBT" = "HB", "Age", "Sex", "Deprivation" = "Quintile"),
+  left_join(pop_hb_age_sex_quintile_year,
+            by = c("HBT" = "HB", "Age", "Sex", "Deprivation" = "Quintile",
+                   "pop_year" = "Year"),
             relationship = "many-to-one") %>%
   left_join(simd_hb %>% select(HB, Quintile, Income_rate, Employment_rate,
-                               crime_rate),
+                               crime_rate, ALCOHOL, DRUG, EMERG, drive_GP,
+                               quintile_population),
             by = c("HBT" = "HB", "Deprivation" = "Quintile")) %>%
   left_join(when_hb_monthly, by = c("Month", "HBT")) %>%
   left_join(referral_hb_age_monthly, by = c("Month", "HBT", "Age"))
 
 ## 5.2 Checks
 
-# Rows with no matched population, expect only the known island board quintile
-# gaps (see missing_combos in Section 4.2)
-combined_model_data %>% filter(is.na(approx_population)) %>% 
-  distinct(Age, Sex, Deprivation)
+# Confirm the year-cap logic 
+combined_model_data %>% distinct(year, pop_year) %>% arrange(year)
 
-# Sanity check: total approximated population across quintiles for a given
-# Age x Sex x HB should sum back to roughly the original pop_hb_age_sex value
-approx_population_check <- approx_pop_age_sex_quintile %>%
-  group_by(HB, Age, Sex) %>%
-  summarise(approx_total = sum(approx_population, na.rm = TRUE), 
-            .groups = "drop") %>%
-  left_join(pop_hb_age_sex %>%
-              mutate(Sex = case_when(Sex == "Males" ~ "Male", 
-                                     Sex == "Females" ~ "Female", TRUE ~ Sex)),
-            by = c("HB", "Age", "Sex")) %>%
-  mutate(difference = approx_total - population)
+# Rows with no matched population - expect only the known island-board
+# quintile gaps (S08000025, S08000026 and S08000028 missing quintile 1/4/5,
+# see missing_combos in Section 4.2)
+combined_model_data %>% 
+  filter(is.na(population)) %>%
+  distinct(HBT, Age, Sex, Deprivation)
 
-stopifnot(max(abs(approx_population_check$difference), na.rm = TRUE) < 1e-8)
+# Duplicate-row check - each Month x HB x Age x Sex x Deprivation combination
+# should appear exactly once; should return zero rows
+combined_model_data %>%
+  count(Month, HBT, Age, Sex, Deprivation) %>%
+  filter(n > 1)
+
+# National population reconciliation for a single year (2020) - compare the
+# year-varying table's 2020 slice against simd_hb's quintile_population
+# (which reflects SIMD 2020 vintage ~2017 population). These won't match
+# exactly (different underlying years), but should be in the same ballpark.
+pop_hb_age_sex_quintile_year %>%
+  filter(Year == 2020) %>%
+  summarise(total = sum(population, na.rm = TRUE))
+
+sum(simd_hb$quintile_population)

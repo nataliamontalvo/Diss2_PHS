@@ -214,16 +214,14 @@ when_data <- when_data %>%
          year   = format(m_date, "%Y"),
          m_num  = as.integer(format(m_date, "%m")))
 
-# Population by health board, age and sex, aggregated by HB (via the Data Zone 
-# to HB mapping in simd_main)
-pop_hb_age_sex <- pop_data %>%
+# Population by data zone, age and sex
+pop_dz <- pop_data %>%
   mutate(Sex = trimws(Sex)) %>%
-  filter(Year == 2020, Sex %in% c("Male", "Female"), DataZone != "S92000003") %>%
-  left_join(simd_main %>% select(DataZone, HB), by = "DataZone") %>%
+  filter(Sex %in% c("Male", "Female"), DataZone != "S92000003") %>%
   pivot_longer(cols = Age0:Age90plus, names_to = "age_col", values_to = "population") %>%
   mutate(age_year = as.integer(gsub("[^0-9]", "", age_col)),
          Age = bin_age(age_year)) %>%
-  group_by(HB, Sex, Age) %>%
+  group_by(DataZone, Year, Sex, Age) %>%
   summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
 
 # Population Table 4: filter to health board level, keep just HB + density
