@@ -1,49 +1,437 @@
 ---
 title: "PHS Risk Analysis"
-author: "Natalia"
+author: "Natalia Montalvo Cabornero"
 date: "2026-08-14"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
 
-source("R/prep.R")
-source("R/merge_data.R")
+source("R/risk_model_data.R")
 
 # Make sure the figure output folders exist
 dir.create("figures/risk_model", recursive = TRUE, showWarnings = FALSE)
 ```
 
+# 1. Data recap
+
+The combined risk model uses `combined_model_data`, built from:
+
+- **Outcome**: `NumberOfAttendances` — monthly count of A&E attendances per
+  demographic group
+  
+- **Offset**: `population` — transforms the model from predicting raw counts 
+  (which are driven by group size as much as by risk) into predicting a 
+  population adjusted rate. Mathematically, including log(population) as an 
+  offset with a coefficient fixed at 1 is equivalent to modelling 
+  NumberOfAttendances / population as the outcome, but done within the count
+  model framework so the correct variance structure is preserved.
+  
+- **Demographic predictors**: `Age` (6 groups), `Sex`, `Deprivation` (SIMD
+  quintile 1-5)
+  
+- **SIMD domain indicators** (HB x Quintile level): `Income_rate`,
+  `Employment_rate`, `crime_rate`, `ALCOHOL`, `DRUG`, `EMERG`, `drive_GP`
+  
+- **Operational context** (HB x Month level): `oohours_pct`, `weekend_pct`,
+  referral mix percentages
+  
+- **Structural terms**: 
+    - `s(t)`: long-term trend, non-linear trajectory of attendance over the 
+              2018–2026 study period
+    - `s(m_num, bs = "cc")`: seasonal smooth, captures the repeating within-year
+              seasonal cycle (e.g. winter peaks) separately from
+              the long-term trend.
+    - `s(HBT, bs = "re")`: health board random intercept, accounts for baseline 
+              differences in attendance rates across Scotland's 14 health boards
+  
+- **Distribution**: negative binomial distribution was chosen over Poisson 
+  because A&E attendance counts show overdispersion. The variance exceeds the 
+  mean, as confirmed by the right-skewed distribution observed in the EDA
 
 ```{r}
-risk_model_data <- risk_model_data %>%
+dim(combined_model_data)  # 79505 x 30
+summary(combined_model_data$NumberOfAttendances)
+summary(combined_model_data$population)
+
+# Confirm no zero/NA populations that would break the log offset
+sum(is.na(combined_model_data$population) | combined_model_data$population <= 0)
+
+summarise_columns(combined_model_data )
+```
+
+5% missing from the merged data with the simd indicators and population from those 
+missing quintile info
+
+```{r}
+# Filter to rows with valid population (excludes island-board quintile gaps)
+risk_data <- combined_model_data %>%
   filter(!is.na(population), population > 0) %>%
   mutate(
-    # months since first observation
-    t = interval(min(m_date), m_date) %/% months(1),
-    
-    # categorical variables as factors
+    HBT = factor(HBT),
     Age = factor(Age),
     Sex = factor(Sex),
-    Deprivation = factor(Deprivation),
-    HBT = factor(HBT))
+    Deprivation = factor(Deprivation)
+  )
+```
 
-summarise_columns(risk_model_data)
+
+# 2. Modelling section 
+
+## 2.1 Baseline model 
+
+```{r}
+baseline_model2 <- gam(NumberOfAttendances ~ 
+                        Age + Sex + Deprivation +
+                        s(t, k = 25) +
+                        s(m_num, bs = "cc", k = 12) +
+                        s(HBT, bs = "re") +
+                        offset(log(population)),
+                      family = nb(),
+                      data = risk_data,
+                      method = "REML")
+
+summary(baseline_model2)
+```
+
+```{r}
+baseline_model <- bam(NumberOfAttendances ~ 
+                        Age + Sex + Deprivation +
+                        s(t, k = 30) +
+                        s(m_num, bs = "cc", k = 12) +
+                        s(HBT, bs = "re") +
+                        offset(log(population)),
+                      family = nb(),
+                      data = risk_data,
+                      method = "REML")
+
+summary(baseline_model)
+
+# Baseline AIC
+baseline_aic <- AIC(baseline_model)
+baseline_aic
+
+# Create table for AIC comparison
+aic_log <- tribble(
+  ~model, ~aic, ~delta_aic, ~note,
+  "baseline", baseline_aic, 0, "Age + Sex + Deprivation + smooths"
+)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+gam.check(baseline_model)
+par(mfrow = c(1, 1))
+```
+
+```{r}
+model_time2 <- system.time({
+  baseline_model <- gam(
+    NumberOfAttendances ~
+      Age + Sex + Deprivation +
+      s(t, k = 25) +
+      s(m_num, bs = "cc", k = 12) +
+      s(HBT, bs = "re") +
+      offset(log(population)),
+    family = nb(),
+    data = risk_data,
+    method = "REML"
+  )
+})
+
+model_time
+#  user  system elapsed 
+# 97.67    4.22  105.31 
+
+
+model_time1 <- system.time({
+  baseline_model <- bam(
+    NumberOfAttendances ~
+      Age + Sex + Deprivation +
+      s(t, k = 25) +
+      s(m_num, bs = "cc", k = 12) +
+      s(HBT, bs = "re") +
+      offset(log(population)),
+    family = nb(),
+    data = risk_data,
+    method = "REML"
+  )
+})
+
+model_time2
+  #  user  system elapsed 
+  # 15.74    1.75   18.08 
+```
+
+
+
+```{r}
+baseline_coefs <- summary(baseline_model)$p.table
+baseline_coefs <- as.data.frame(baseline_coefs)
+baseline_coefs$rate_ratio <- exp(baseline_coefs$Estimate)
+baseline_coefs$rr_lower <- exp(baseline_coefs$Estimate - 1.96 * baseline_coefs$`Std. Error`)
+baseline_coefs$rr_upper <- exp(baseline_coefs$Estimate + 1.96 * baseline_coefs$`Std. Error`)
+baseline_coefs
+```
+
+```{r}
+# Smooth term plots
+plot(baseline_model, pages = 1, shade = TRUE)
+```
+
+### Check NB over Poisson
+
+```{r}
+poisson_model <- bam(
+  NumberOfAttendances ~
+    Age + Sex + Deprivation +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = poisson(),
+  data = risk_data,
+  method = "REML"
+)
+
+# Dispersion ratio: residual deviance / residual df
+# Should be close to 1 for Poisson; >>1 indicates overdispersion
+dispersion_ratio <- sum(residuals(poisson_model, type = "deviance")^2) / poisson_model$df.residual
+dispersion_ratio
+
+# Compare AIC
+AIC(poisson_model)
+AIC(baseline_model)
+
+# The difference should be large and favour the NB model (lower AIC)
+AIC(poisson_model) - AIC(baseline_model)
+```
+
+## 2.2 Baseline + income
+
+```{r}
+model_income <- bam(NumberOfAttendances ~ 
+                        Age + Sex + Deprivation + Income_rate +
+                        s(t, k = 30) +
+                        s(m_num, bs = "cc", k = 12) +
+                        s(HBT, bs = "re") +
+                        offset(log(population)),
+                      family = nb(),
+                      data = risk_data,
+                      method = "REML")
+
+summary(model_income)
+```
+
+Change of direction of coeffs -- maybe due to circularity?
+option maybe replace "deprivation" by only indicators
+
+```{r}
+aic_log <- aic_log %>% add_row(
+  model = "+ Income_rate", aic = AIC(model_income),
+  delta_aic = AIC(model_income) - baseline_aic,
+  note = "Income deprivation rate (HB x Quintile level)"
+)
+aic_log
+```
+
+## 2.3 Baseline + EMERG
+```{r}
+model_emerg <- bam(
+  NumberOfAttendances ~
+    Age + Sex + Deprivation + EMERG +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+summary(model_emerg)
+```
+
+similar issue: dep index is positive now
+
+```{r}
+aic_log <- aic_log %>% add_row(
+  model = "+ EMERG", aic = AIC(model_emerg),
+  delta_aic = AIC(model_emerg) - baseline_aic,
+  note = "Historical emergency stays ratio (SIMD health domain)"
+)
+
+aic_log
+```
+
+## 2.4 Baseline + External (when data)
+
+```{r}
+model_external <- bam(
+  NumberOfAttendances ~
+    Age + Sex + Deprivation + oohours_pct + weekend_pct +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+summary(model_external)
+```
+
+- HB with higher oohours share have lower attendacne rates --> areas with better 
+primary care alternatives divert some demand?
+- HB with higher weekend share have higher rates --> maybe areas where weekend 
+alternatives GP or pharmacies are less available
+
+```{r}
+aic_log <- aic_log %>% add_row(
+  model = "+ oohours_pct + weekend_pct",
+  aic = AIC(model_external),
+  delta_aic = AIC(model_external) - baseline_aic,
+  note = "External operational context only (no SIMD indicators)"
+)
+
+aic_log
+```
+
+some improvement
+
+## 2.5 Baseline no Deprivation, only indicators
+
+```{r}
+model_indicators <- bam(
+  NumberOfAttendances ~
+    Age + Sex + Income_rate + EMERG + crime_rate + drive_GP +
+    oohours_pct + weekend_pct +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+summary(model_indicators)
+```
+
+- Income_rate: strongest effect by far. Higher income deprivation --> higher 
+attendance rate.
+- EMERG: higher historical emergency burden --> higher attendance. 
+- crime_rate: negative (higher crime --> lower attendance?). maybe crime rate 
+correlates with income deprivation
+- drive_GP: negative, longer drive to GP --> lower attendance. could reflect 
+rurality: remote areas have long GP drive times and long A&E drive times
+- oohours_pct and weekend_pct — same direction and magnitude as model_external.
+
+
+```{r}
+aic_log <- aic_log %>% add_row(
+  model = "indicators(no Deprivation)",
+  aic = AIC(model_indicators),
+  delta_aic = AIC(model_indicators) - baseline_aic,
+  note = "SIMD domain indicators replace Deprivation quintile"
+)
+aic_log
+```
+
+```{r}
 
 ```
 
 
-```{r}
-model_r1 <- gam(NumberOfAttendances ~ Age + Sex + Deprivation +
-                     s(t, k = 15) +
-                     s(m_num, bs = "cc", k = 12) +
-                     s(HBT, bs = "re") +
-                     offset(log(population)),  # attendance rate
-                   family = nb(),
-                   method = "REML",
-                   data = risk_model_data)
+## 2.6 Baseline no Deprivation, only indicators (no crime)
 
-summary(model_r1)
-gam.check(model_r1)
+```{r}
+model_indicators_nocrime <- bam(
+  NumberOfAttendances ~
+    Age + Sex + Income_rate + EMERG + drive_GP +
+    oohours_pct + weekend_pct +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+summary(model_indicators_nocrime)
+```
+
+```{r}
+aic_log <- aic_log %>% add_row(
+  model = "indicators(no Deprivation/crime rate)",
+  aic = AIC(model_indicators_nocrime),
+  delta_aic = AIC(model_indicators_nocrime) - baseline_aic,
+  note = "SIMD domain indicators replace Deprivation quintile (no crime rate)"
+)
+aic_log
+```
+
+worse AIC, so crime does add info
+
+maybe among areas with similar income deprivation levels, those with higher 
+crime rates tend to have slightly lower attendance, possibly because high-crime 
+areas in Scotland tend to be dense urban locations with better access to both 
+A&E and alternative services, while lower-crime areas at the same income level 
+tend to be more dispersed/rural with fewer options.
+
+
+## 2.7 interactions to explore
+
+- Age * sex
+
+```{r}
+model_interaction_age_sex <- bam(
+  NumberOfAttendances ~
+    Age * Sex + Deprivation + oohours_pct + weekend_pct +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+summary(model_interaction_age_sex)
+AIC(model_interaction_age_sex) - baseline_aic
+```
+
+
+- Age * deprivation
+
+```{r}
+model_interaction_age_dep <- bam(
+  NumberOfAttendances ~
+    Age * Deprivation + Sex + oohours_pct + weekend_pct +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+summary(model_interaction_age_dep)
+AIC(model_interaction_age_dep) - baseline_aic
+```
+
+```{r}
+model_both_interactions <- bam(
+  NumberOfAttendances ~
+    Age * Sex + Age * Deprivation + oohours_pct + weekend_pct +
+    s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+summary(model_both_interactions)
+
+AIC(model_both_interactions) - baseline_aic
+
+aic_log <- aic_log %>% add_row(
+  model = "Age*Sex + Age*Dep + external",
+  aic = AIC(model_both_interactions),
+  delta_aic = AIC(model_both_interactions) - baseline_aic,
+  note = "Both interactions + operational context"
+)
+```
+
+```{r}
+gam.check(model_both_interactions)
 ```
 
