@@ -1,0 +1,1106 @@
+---
+title: "PHS Admissions Analysis"
+author: "Natalia Montalvo Cabornero"
+date: "2026-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+source("R/admissions_model_data.R")
+
+# Make sure the figure output folders exist
+dir.create("figures/admissions_model", recursive = TRUE, showWarnings = FALSE)
+```
+
+
+# 1. Data recap
+
+Given that someone has already attended A&E, what factors predict whether they 
+are admitted to hospital?
+
+- **Outcome**: `cbind(admitted, not_admitted)` with a binomial family
+
+**Predictors available**:
+
+- *Patient-level (within discharge data)*: `Age`, `DepartmentType`
+- *Site-level context*: `TreatmentLocation` (as random effect), referral mix
+  (`pct_ref_Self Referral`, `pct_ref_Ambulance`, etc.)
+- *Operational context*: `oohours_pct`, `weekend_pct`
+- *Area-level deprivation context*: SIMD indicators collapsed to HB level
+  (Income_rate, Employment_rate, etc.) — note these describe the HB overall,
+  not the individual patient's deprivation, since discharges_data has no
+  Deprivation column
+- *Time*: trend `s(t)` and seasonality `s(m_num, bs = "cc")`
+
+**Key limitation**: no `Sex` or `Deprivation` columns in discharges_data, so
+this model cannot test whether admission probability differs by sex or by
+individual patient deprivation.
+
+```{r}
+dim(admission_model_data)
+summarise_columns(admission_model_data)
+```
+
+4369 rows (14.4%) have missing Age, which also causes the referral-mix columns 
+to fail their join (since referral context is matched at the Month × HBT × 
+TreatmentLocation × DepartmentType × Age level). The missingness rate is 
+consistent across all referral columns, confirming it originates from the 
+missing Age rather than from gaps in the referral source data itself.
+
+## 1.1 Overall admission rates 
+
+```{r}
+admission_model_data %>%
+  filter(!is.na(Age), Age != "") %>%
+  summarise(
+    total_attendances = sum(total_attendances),
+    total_admitted = sum(admitted),
+    admission_rate = total_admitted / total_attendances * 100
+  )
+```
+
+
+## 1.2 Admission rates by department type
+
+```{r}
+admission_model_data %>%
+  filter(!is.na(Age), Age != "") %>%
+  group_by(DepartmentType) %>%
+  summarise(
+    total_attendances = sum(total_attendances),
+    total_admitted = sum(admitted),
+    admission_rate = total_admitted / total_attendances * 100,
+    pct_of_all_attendances = total_attendances /
+      sum(admission_model_data %>%
+            filter(!is.na(Age), Age != "") %>%
+            pull(total_attendances)) * 100
+  )
+```
+
+Type 1 (major ED) accounts for 88% of all attendances with an admission rate of 
+27.3%, while Type 3 (minor injury units) only the 12% of attendances with a 
+lower admission rate of 8.9%. 
+
+(Potentially restrict the models to Type 1 department.)
+
+
+## 1.3 Admission rates by age group 
+
+```{r}
+# Both departments
+admission_model_data %>%
+  filter(!is.na(Age), Age != "") %>%
+  group_by(Age) %>%
+  summarise(
+    total_attendances = sum(total_attendances),
+    total_admitted = sum(admitted),
+    admission_rate = total_admitted / total_attendances * 100
+  ) %>%
+  arrange(desc(admission_rate))
+```
+
+
+```{r}
+# Only Type 1 department
+admission_model_data %>%
+  filter(!is.na(Age), Age != "", DepartmentType == "Type 1") %>%
+  group_by(Age) %>%
+  summarise(
+    total_attendances = sum(total_attendances),
+    total_admitted = sum(admitted),
+    admission_rate = total_admitted / total_attendances * 100
+  ) %>%
+  arrange(desc(admission_rate))
+```
+
+
+# 2. Initial model exploration (GAM)
+
+A binomial GAM was fitted first as the natural starting point for grouped
+binary outcome data.
+
+```{r}
+# Prepare GAM model data
+admission_data_gam <- admission_model_data %>%
+  filter(!is.na(admitted), !is.na(total_attendances),
+         total_attendances > 0,
+         !is.na(Age), Age != "") %>%
+  mutate(
+    Age = factor(Age),
+    HBT = factor(HBT),
+    DepartmentType = factor(DepartmentType),
+    TreatmentLocation = factor(TreatmentLocation)
+  )
+
+cat("Number of rows in the data:", nrow(admission_data_gam), "\n")
+```
+
+## 2.1 Binomial GAM baseline
+
+```{r}
+baseline_admission_bin <- gam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data_gam,
+  method = "REML"
+)
+
+summary(baseline_admission_bin)
+
+baseline_admission_bin2 <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data_gam,
+  method = "REML"
+)
+
+summary(baseline_admission_bin2)
+```
+Differences with bam 
+
+```{r}
+par(mfrow = c(2, 2))
+gam.check(baseline_admission_bin)
+par(mfrow = c(1, 1))
+```
+
+## 2.2 Overdispersion check
+
+```{r}
+# Dispersion ratio: residual deviance / residual df
+# Should be close to 1 for binomial; >>1 indicates overdispersion
+dispersion_ratio_admission <- sum(
+                     residuals(baseline_admission, 
+                     type = "deviance")^2) / baseline_admission$df.residual
+dispersion_ratio_admission
+```
+
+## 2.3 Check the Quasi-binomial distribution
+
+```{r}
+baseline_admission <- gam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = quasibinomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(baseline_admission)
+summary(baseline_admission)$dispersion
+```
+
+```{r}
+# Compare binomial vs quasibinomial side by side
+binomial_coefs <- summary(baseline_admission_bin)$p.table
+quasi_coefs <- summary(baseline_admission)$p.table
+
+cbind(
+  binomial_est = binomial_coefs[, "Estimate"],
+  quasi_est = quasi_coefs[, "Estimate"],
+  binomial_se = binomial_coefs[, "Std. Error"],
+  quasi_se = quasi_coefs[, "Std. Error"]
+)
+```
+
+The coefficients are very similar except for department type, which shifted from
+-6.04 (binomial) to -5.15 (quasibinomial), while all other parametric 
+coefficients remained stable to the third decimal place. This suggests numerical 
+sensitivity in the quasi-likelihood estimation for near-boundary predictions, 
+driven by the disparity in admission rates between department types.
+
+```{r}
+par(mfrow = c(2, 2))
+gam.check(baseline_admission)
+par(mfrow = c(1, 1))
+```
+
+```{r}
+gam_type1_only <- gam(
+  cbind(admitted, not_admitted) ~
+    Age +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data_gam %>% filter(DepartmentType == "Type 1"),
+  method = "REML"
+)
+
+# Overdispersion check on Type 1 only
+dispersion_type1 <- sum(residuals(gam_type1_only, type = "deviance")^2) /
+  gam_type1_only$df.residual
+dispersion_type1
+
+# Also worth a quick look at the diagnostics
+par(mfrow = c(2, 2))
+gam.check(gam_type1_only)
+par(mfrow = c(1, 1))
+```
+
+```{r}
+gam_type1_only2 <- gam(
+  cbind(admitted, not_admitted) ~
+    Age +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = quasibinomial(),
+  data = admission_data_gam %>% filter(DepartmentType == "Type 1"),
+  method = "REML"
+)
+summary(gam_type1_only2)
+
+# Overdispersion check on Type 1 only
+dispersion_type1_2 <- sum(residuals(gam_type1_only2, type = "deviance")^2) /
+  gam_type1_only2$df.residual
+dispersion_type1_2
+
+# Also worth a quick look at the diagnostics
+par(mfrow = c(2, 2))
+gam.check(gam_type1_only2)
+par(mfrow = c(1, 1))
+```
+
+
+
+```{r}
+# Compare binomial vs quasibinomial side by side TYPE 1
+binomial_coefs <- summary(gam_type1_only)$p.table
+quasi_coefs <- summary(gam_type1_only2)$p.table
+
+cbind(
+  binomial_est = binomial_coefs[, "Estimate"],
+  quasi_est = quasi_coefs[, "Estimate"],
+  binomial_se = binomial_coefs[, "Std. Error"],
+  quasi_se = quasi_coefs[, "Std. Error"]
+)
+```
+
+
+## 2.4 Framework decision
+
+1. **Overdispersion** (dispersion ratio = 6.08 under binomial; estimated 
+   scale = 6.56 under quasibinomial): the binomial variance assumption 
+   underestimates the true variability in admission counts. A quasibinomial()
+   was tested: while standard errors were correctly inflated, the DepartmentType 
+   coefficient shifted from -6.04 (binomial) to -5.15 (quasibinomial), a change 
+   of 0.89 on the log-odds scale, while all other parametric coefficients 
+   remained stable to the third decimal place. This suggests numerical 
+   sensitivity in the quasi-likelihood estimation for near-boundary predictions. 
+   Additionally, the quasibinomial family loses AIC (the primary model 
+   comparison metric used throughout the risk model), forcing reliance on 
+   less precise alternatives (anova(..., test = "F") or deviance-explained) for 
+   predictor comparison.
+
+2. **Structural differences between department types**: Type 1 departments 
+   showed a 29.1% admission rate across 88% of all attendances, while Type 3 
+   (minor injury units) showed 12.7% across the remaining 12%. Although Type 3's
+   rate is not negligible, the two department types represent fundamentally 
+   different clinical settings where the factors influencing admission decisions
+   likely differ — major EDs with full inpatient capacity versus minor injury units with limited admission pathways. Diagnostic plots confirmed this structural difference produced residual heterogeneity: the QQ plot showed severe S-shaped departure (deviance residuals reaching +30), and the residuals-vs-linear-predictor plot showed a clear fan pattern, with variance increasing markedly across the range of predicted probabilities.
+
+
+check this again
+
+##################################################################
+
+# 3. INLA baseline model
+
+## 3.1 Prepare INLA data
+
+```{r}
+# Filter to Type 1 only, rename columns with spaces for cleaner formula
+# syntax, create numeric indices for random effects (INLA requires numeric,
+# not factor, for f() terms), and add observation-level ID for the
+# overdispersion random effect
+admission_inla_data <- admission_model_data %>%
+  filter(DepartmentType == "Type 1",
+         !is.na(Age), Age != "",
+         !is.na(admitted), total_attendances > 0) %>%
+  rename(
+    pct_ref_self = `pct_ref_Self Referral`,
+    pct_ref_ambulance = `pct_ref_Ambulance`
+  ) %>%
+  mutate(
+    Age = factor(Age),
+    TreatmentLocation_id = as.numeric(factor(TreatmentLocation)),
+    HBT_id = as.numeric(factor(HBT)),
+    t_rounded = round(as.numeric(m_date - min(m_date)) / 30),
+    obs_id = row_number()
+  )
+
+cat("Number of rows:", nrow(admission_inla_data), "\n")
+cat("Number of treatment locations:", n_distinct(admission_inla_data$TreatmentLocation), "\n")
+
+# Verify time and month indices are what INLA's rw2/rw1 expect
+range(admission_inla_data$t_rounded)
+table(admission_inla_data$m_num)
+
+# Location ID mapping (for interpreting site random effects later)
+location_mapping <- admission_inla_data %>%
+  distinct(TreatmentLocation, TreatmentLocation_id, HBT) %>%
+  arrange(TreatmentLocation_id)
+location_mapping
+```
+
+## 3.2 Model specification justification
+
+```{r}
+baseline_admission_inla <- inla(
+  admitted ~
+    Age +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE, config = TRUE),
+  control.predictor = list(compute = TRUE)
+)
+
+summary(baseline_admission_inla)
+```
+
+
+## 3.4 Coefficient interpretation
+
+```{r}
+# Fixed effects: INLA reports posterior mean and 95% credible intervals
+# Exponentiate to get odds ratios (logit link)
+fixed_effects <- baseline_admission_inla$summary.fixed
+fixed_effects$odds_ratio <- exp(fixed_effects$mean)
+fixed_effects$or_lower <- exp(fixed_effects$`0.025quant`)
+fixed_effects$or_upper <- exp(fixed_effects$`0.975quant`)
+fixed_effects
+```
+
+Cross-check against the descriptive admission rates in Section 1.3:
+- 75 plus should show the highest odds of admission
+- Under 18 should show lower odds than the 18-24 reference
+- The odds should increase monotonically with age
+
+
+## 3.5 Hyperparameters and random effect summaries
+
+```{r}
+# The obs_id precision tells you how much overdispersion the observation-
+# level RE is absorbing — low precision (high variance) = substantial
+# overdispersion being handled
+baseline_admission_inla$summary.hyperpar
+```
+
+
+## 3.6 Smooth term plots
+
+```{r}
+par(mfrow = c(1, 3))
+
+# Time trend
+plot(baseline_admission_inla$summary.random$t_rounded$ID,
+     baseline_admission_inla$summary.random$t_rounded$mean,
+     type = "l", xlab = "t (months since start)", ylab = "Effect",
+     main = "Time trend f(t)")
+
+# Seasonal cycle
+plot(baseline_admission_inla$summary.random$m_num$ID,
+     baseline_admission_inla$summary.random$m_num$mean,
+     type = "l", xlab = "Month", ylab = "Effect",
+     main = "Seasonal cycle f(m_num)")
+
+# Site-level random intercepts (ranked)
+site_re <- baseline_admission_inla$summary.random$TreatmentLocation_id
+plot(sort(site_re$mean), seq_along(site_re$mean),
+     xlab = "Random intercept", ylab = "Site rank",
+     main = "Site random effects", pch = 16)
+abline(v = 0, lty = 2)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+baseline_no_olre <- inla(
+  admitted ~
+    Age +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+summary(baseline_no_olre)
+
+# Compare
+tibble(
+  model = c("Without OLRE", "With OLRE"),
+  WAIC = c(baseline_no_olre$waic$waic, baseline_admission_inla$waic$waic),
+  DIC = c(baseline_no_olre$dic$dic, baseline_admission_inla$dic$dic)
+)
+```
+
+
+```{r}
+baseline_betabin <- inla(
+  admitted ~
+    Age +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid"),
+  family = "betabinomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+tibble(
+  model = c("Binomial + OLRE", "Beta-Binomial"),
+  WAIC = c(baseline_admission_inla$waic$waic, baseline_betabin$waic$waic)
+)
+```
+
+
+
+## 3.7 Record baseline WAIC
+
+```{r}
+baseline_waic <- baseline_admission_inla$waic$waic
+baseline_waic
+
+waic_log <- tribble(
+  ~model, ~waic, ~delta_waic, ~note,
+  "baseline", baseline_waic, 0,
+  "Age + time + season + site RE + obs RE"
+)
+
+waic_log
+```
+
+
+# 4. Adding contextual predictors
+
+## 4.1 Self-referral share
+
+Hypothesis: self-referred patients may be lower acuity on average (chose
+to come themselves rather than being sent by a GP or arriving by
+ambulance), so a higher self-referral share could predict lower admission
+probability.
+
+```{r}
+model_adm_referral <- inla(
+  admitted ~
+    Age + pct_ref_self +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+model_adm_referral$summary.fixed
+model_adm_referral$waic$waic - baseline_waic
+
+waic_log <- waic_log %>% add_row(
+  model = "+ Self Referral %",
+  waic = model_adm_referral$waic$waic,
+  delta_waic = model_adm_referral$waic$waic - baseline_waic,
+  note = "Self-referral share (site x month x age level)"
+)
+waic_log
+```
+
+
+## 4.2 Ambulance referral share
+
+Hypothesis: ambulance arrivals are typically higher acuity, predicting
+higher admission probability.
+
+```{r}
+model_adm_ambulance <- inla(
+  admitted ~
+    Age + pct_ref_ambulance +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+summary(model_adm_ambulance)
+model_adm_ambulance$summary.fixed
+model_adm_ambulance$waic$waic - baseline_waic
+
+waic_log <- waic_log %>% add_row(
+  model = "+ Ambulance %",
+  waic = model_adm_ambulance$waic$waic,
+  delta_waic = model_adm_ambulance$waic$waic - baseline_waic,
+  note = "Ambulance referral share (site x month x age level)"
+)
+
+waic_log
+```
+
+
+## 4.3 Out-of-hours share
+
+Hypothesis: out-of-hours attendances may have different case mix (fewer
+minor complaints, more genuine emergencies), potentially predicting
+higher admission rates.
+
+```{r}
+model_adm_ooh <- inla(
+  admitted ~
+    Age + oohours_pct +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+model_adm_ooh$summary.fixed
+model_adm_ooh$waic$waic - baseline_waic
+
+waic_log <- waic_log %>% add_row(
+  model = "+ oohours_pct",
+  waic = model_adm_ooh$waic$waic,
+  delta_waic = model_adm_ooh$waic$waic - baseline_waic,
+  note = "Out-of-hours share (site x month level)"
+)
+waic_log
+
+```
+
+
+## 4.4 Income deprivation (HB-level context)
+
+Note: this is the HB's overall income deprivation rate, not the individual
+patient's deprivation — no collinearity risk since there is no row-level
+Deprivation variable to compete with.
+
+```{r}
+model_adm_income <- inla(
+  admitted ~
+    Age + Income_rate +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+model_adm_income$summary.fixed
+model_adm_income$waic$waic - baseline_waic
+
+waic_log <- waic_log %>% add_row(
+  model = "+ Income_rate",
+  waic = model_adm_income$waic$waic,
+  delta_waic = model_adm_income$waic$waic - baseline_waic,
+  note = "HB-level income deprivation rate"
+)
+
+waic_log
+```
+
+
+## 4.5 Compare all single additions
+
+```{r}
+waic_log %>% arrange(delta_waic)
+```
+
+
+```{r}
+# Within-site deviation from the site's own mean
+admission_inla_data <- admission_inla_data %>%
+  group_by(TreatmentLocation_id) %>%
+  mutate(
+    site_mean_self = mean(pct_ref_self, na.rm = TRUE),
+    self_ref_deviation = pct_ref_self - site_mean_self,
+    site_mean_ambulance = mean(pct_ref_ambulance, na.rm = TRUE),
+    ambulance_deviation = pct_ref_ambulance - site_mean_ambulance
+  ) %>%
+  ungroup()
+
+model_adm_self_dev <- inla(
+  admitted ~
+    Age + self_ref_deviation +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+model_adm_self_dev$waic$waic
+model_adm_self_dev$waic$waic - baseline_waic
+```
+
+```{r}
+admission_inla_data <- admission_inla_data %>%
+  group_by(TreatmentLocation_id) %>%
+  mutate(
+    site_mean_weekend = mean(weekend_pct, na.rm = TRUE),
+    weekend_deviation = weekend_pct - site_mean_weekend
+  ) %>%
+  ungroup()
+
+model_adm_weekend_dev <- inla(
+  admitted ~
+    Age + weekend_deviation +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+model_adm_weekend_dev$waic$waic
+model_adm_weekend_dev$waic$waic - baseline_waic
+```
+
+
+# 5. Combined model
+
+Based on the results above, combine the predictors that individually
+improved WAIC. Check whether they still help when present together
+(correlated predictors may become redundant in combination).
+
+```{r}
+# Adjust this specification based on which predictors improved WAIC above
+model_adm_combined <- inla(
+  admitted ~
+    Age + pct_ref_self + pct_ref_ambulance +
+    oohours_pct + Income_rate +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data$total_attendances,
+  data = admission_inla_data,
+  control.compute = list(dic = TRUE, waic = TRUE, config = TRUE),
+  control.predictor = list(compute = TRUE)
+)
+
+summary(model_adm_combined)
+```
+
+```{r}
+# Final coefficient table with odds ratios and credible intervals
+final_fixed <- model_adm_combined$summary.fixed
+final_fixed$odds_ratio <- exp(final_fixed$mean)
+final_fixed$or_lower <- exp(final_fixed$`0.025quant`)
+final_fixed$or_upper <- exp(final_fixed$`0.975quant`)
+final_fixed
+
+waic_log <- waic_log %>% add_row(
+  model = "combined",
+  waic = model_adm_combined$waic$waic,
+  delta_waic = model_adm_combined$waic$waic - baseline_waic,
+  note = "All improving predictors together"
+)
+
+waic_log %>% arrange(delta_waic)
+```
+
+```{r, fig.width=10, fig.height=5}
+# Final model smooth term plots
+par(mfrow = c(1, 3))
+
+plot(model_adm_combined$summary.random$t_rounded$ID,
+     model_adm_combined$summary.random$t_rounded$mean,
+     type = "l", xlab = "t (months since start)", ylab = "Effect",
+     main = "Time trend f(t)")
+
+plot(model_adm_combined$summary.random$m_num$ID,
+     model_adm_combined$summary.random$m_num$mean,
+     type = "l", xlab = "Month", ylab = "Effect",
+     main = "Seasonal cycle f(m_num)")
+
+site_re <- model_adm_combined$summary.random$TreatmentLocation_id
+plot(sort(site_re$mean), seq_along(site_re$mean),
+     xlab = "Random intercept", ylab = "Site rank",
+     main = "Site random effects", pch = 16)
+abline(v = 0, lty = 2)
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+# Hyperparameter summaries
+model_adm_combined$summary.hyperpar
+```
+
+
+# 6. Sensitivity: narrow vs broad admission definition
+
+Compare the final model under both definitions to check whether results
+are robust to including transfers ("Transferred to Other Hospital/Service").
+
+```{r}
+# Create broad-definition data with consistent factor levels and IDs
+# Using the same factor levels as narrow data ensures TreatmentLocation_id
+# mapping is consistent between the two datasets
+location_levels <- levels(factor(admission_inla_data$TreatmentLocation))
+
+admission_inla_data_broad <- admission_model_data_broad %>%
+  filter(DepartmentType == "Type 1",
+         !is.na(Age), Age != "",
+         !is.na(admitted), total_attendances > 0) %>%
+  rename(
+    pct_ref_self = `pct_ref_Self Referral`,
+    pct_ref_ambulance = `pct_ref_Ambulance`
+  ) %>%
+  mutate(
+    Age = factor(Age),
+    TreatmentLocation_id = as.numeric(factor(TreatmentLocation,
+                                              levels = location_levels)),
+    t_rounded = round(as.numeric(m_date - min(m_date)) / 30),
+    obs_id = row_number()
+  )
+
+# Refit final specification with broad definition
+model_adm_broad <- inla(
+  admitted ~
+    Age + pct_ref_self + pct_ref_ambulance +
+    oohours_pct + Income_rate +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(TreatmentLocation_id, model = "iid") +
+    f(obs_id, model = "iid"),
+  family = "binomial",
+  Ntrials = admission_inla_data_broad$total_attendances,
+  data = admission_inla_data_broad,
+  control.compute = list(dic = TRUE, waic = TRUE)
+)
+
+# Compare coefficients side by side
+narrow_fixed <- model_adm_combined$summary.fixed %>%
+  as.data.frame() %>%
+  mutate(definition = "narrow", or = exp(mean))
+
+broad_fixed <- model_adm_broad$summary.fixed %>%
+  as.data.frame() %>%
+  mutate(definition = "broad", or = exp(mean))
+
+bind_rows(
+  narrow_fixed %>% select(definition, mean, or, `0.025quant`, `0.975quant`),
+  broad_fixed %>% select(definition, mean, or, `0.025quant`, `0.975quant`)
+)
+```
+
+
+
+
+# -------------------------------------------------------------------------------
+
+
+#CAMBIO---- Nested randome effects by trt location 
+
+```{r}
+baseline_admission_nested <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(HBT, bs = "re") +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(baseline_admission_nested)
+AIC(baseline_admission_nested) - AIC(baseline_admission)
+```
+
+## 2.2 Coefficient interpretation
+
+```{r}
+# Exponentiate to get odds ratios (binomial uses logit link, so
+# exp(coefficient) = odds ratio, not rate ratio as in the NB risk model)
+coefs_admission <- as.data.frame(summary(baseline_admission)$p.table)
+coefs_admission$odds_ratio <- exp(coefs_admission$Estimate)
+coefs_admission$or_lower <- exp(coefs_admission$Estimate - 1.96 * coefs_admission$`Std. Error`)
+coefs_admission$or_upper <- exp(coefs_admission$Estimate + 1.96 * coefs_admission$`Std. Error`)
+coefs_admission
+```
+
+## 2.3 Smooth term plots
+
+```{r, fig.width=10, fig.height=4}
+plot(baseline_admission, pages = 1, shade = TRUE)
+```
+
+## 2.4 Record baseline AIC
+
+```{r}
+baseline_admission_aic <- AIC(baseline_admission)
+baseline_admission_aic
+
+aic_admission_log <- tribble(
+  ~model, ~aic, ~delta_aic, ~note,
+  "baseline", baseline_admission_aic, 0,
+  "Age + DepartmentType + smooths"
+)
+```
+
+# -------------------------------------------------------------------------------
+
+# 4. Adding contextual predictors
+
+Same one-at-a-time approach as the risk model. Since there is no
+Deprivation column in this dataset, SIMD indicators can be tested
+directly without the collinearity problem encountered in the risk model
+— they are HB-level context here, not competing with a row-level
+quintile variable.
+
+## 4.1 Referral mix (self-referral share)
+
+Hypothesis: self-referred patients may be lower acuity on average (chose
+to come themselves rather than being sent by a GP or arriving by
+ambulance), so a higher self-referral share could predict lower admission
+probability.
+
+```{r}
+model_adm_referral <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType + `pct_ref_Self Referral` +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(model_adm_referral)$p.table
+AIC(model_adm_referral) - baseline_admission_aic
+
+aic_admission_log <- aic_admission_log %>% add_row(
+  model = "+ Self Referral %",
+  aic = AIC(model_adm_referral),
+  delta_aic = AIC(model_adm_referral) - baseline_admission_aic,
+  note = "Self-referral share (site x month x age level)"
+)
+```
+
+## 4.2 Ambulance referral share
+
+Hypothesis: ambulance arrivals are typically higher acuity, so a higher
+ambulance share could predict higher admission probability.
+
+```{r}
+model_adm_ambulance <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType + `pct_ref_Ambulance` +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(model_adm_ambulance)$p.table
+AIC(model_adm_ambulance) - baseline_admission_aic
+
+aic_admission_log <- aic_admission_log %>% add_row(
+  model = "+ Ambulance %",
+  aic = AIC(model_adm_ambulance),
+  delta_aic = AIC(model_adm_ambulance) - baseline_admission_aic,
+  note = "Ambulance referral share (site x month x age level)"
+)
+```
+
+## 4.3 Out-of-hours share
+
+Hypothesis: out-of-hours attendances may have different case mix (fewer
+minor complaints, more genuine emergencies), potentially predicting
+higher admission rates.
+
+```{r}
+model_adm_ooh <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType + oohours_pct +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(model_adm_ooh)$p.table
+AIC(model_adm_ooh) - baseline_admission_aic
+
+aic_admission_log <- aic_admission_log %>% add_row(
+  model = "+ oohours_pct",
+  aic = AIC(model_adm_ooh),
+  delta_aic = AIC(model_adm_ooh) - baseline_admission_aic,
+  note = "Out-of-hours share (site x month level)"
+)
+```
+
+## 4.4 Income deprivation (HB-level context)
+
+Note: this is the HB's overall income deprivation rate, not the
+individual patient's deprivation — entered as board-level context. No
+collinearity risk here since there is no row-level Deprivation variable
+to compete with.
+
+```{r}
+model_adm_income <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType + Income_rate +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(model_adm_income)$p.table
+AIC(model_adm_income) - baseline_admission_aic
+
+aic_admission_log <- aic_admission_log %>% add_row(
+  model = "+ Income_rate",
+  aic = AIC(model_adm_income),
+  delta_aic = AIC(model_adm_income) - baseline_admission_aic,
+  note = "HB-level income deprivation rate"
+)
+```
+
+## 4.5 Compare all single additions
+
+```{r}
+aic_admission_log %>% arrange(delta_aic)
+```
+
+# 5. Combined model
+
+Based on the results above, combine the predictors that individually
+improved AIC. Check whether they still help when present together
+(correlated predictors may become redundant in combination).
+
+```{r}
+# Adjust this specification based on which predictors improved AIC above
+model_adm_combined <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType +
+    `pct_ref_Self Referral` + `pct_ref_Ambulance` +
+    oohours_pct + Income_rate +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data,
+  method = "REML"
+)
+
+summary(model_adm_combined)
+AIC(model_adm_combined) - baseline_admission_aic
+
+aic_admission_log <- aic_admission_log %>% add_row(
+  model = "combined",
+  aic = AIC(model_adm_combined),
+  delta_aic = AIC(model_adm_combined) - baseline_admission_aic,
+  note = "All improving predictors together"
+)
+```
+
+```{r, fig.width=10, fig.height=8}
+par(mfrow = c(2, 2))
+gam.check(model_adm_combined)
+par(mfrow = c(1, 1))
+```
+
+```{r}
+# Final coefficient table with odds ratios
+coefs_final <- as.data.frame(summary(model_adm_combined)$p.table)
+coefs_final$odds_ratio <- exp(coefs_final$Estimate)
+coefs_final$or_lower <- exp(coefs_final$Estimate - 1.96 * coefs_final$`Std. Error`)
+coefs_final$or_upper <- exp(coefs_final$Estimate + 1.96 * coefs_final$`Std. Error`)
+coefs_final
+```
+
+# 6. Sensitivity: narrow vs broad admission definition
+
+Compare the final model under both definitions to check whether results
+are robust to including transfers.
+
+```{r}
+# Refit with broad definition
+admission_data_broad <- admission_model_data_broad %>%
+  filter(!is.na(admitted), !is.na(total_attendances),
+         total_attendances > 0,
+         !is.na(Age), Age != "") %>%
+  mutate(
+    Age = factor(Age),
+    HBT = factor(HBT),
+    DepartmentType = factor(DepartmentType),
+    TreatmentLocation = factor(TreatmentLocation)
+  )
+
+# Use same specification as final narrow model above
+model_adm_broad <- bam(
+  cbind(admitted, not_admitted) ~
+    Age + DepartmentType +
+    `pct_ref_Self Referral` + `pct_ref_Ambulance` +
+    oohours_pct + Income_rate +
+    s(t, k = 30) +
+    s(m_num, bs = "cc", k = 12) +
+    s(TreatmentLocation, bs = "re"),
+  family = binomial(),
+  data = admission_data_broad,
+  method = "REML"
+)
+
+# Compare coefficients side by side
+narrow_coefs <- summary(model_adm_combined)$p.table %>%
+  as.data.frame() %>%
+  mutate(definition = "narrow", or = exp(Estimate))
+
+broad_coefs <- summary(model_adm_broad)$p.table %>%
+  as.data.frame() %>%
+  mutate(definition = "broad", or = exp(Estimate))
+
+bind_rows(narrow_coefs, broad_coefs) %>%
+  select(definition, Estimate, or, `Pr(>|t|)`)
+```
+
+

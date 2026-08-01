@@ -190,8 +190,7 @@ missing_combos
 # the most recent available year (2024) is used as a documented fallback.
 
 # Year-varying population by HB x Quintile x Age x Sex
-max_pop_year <- max(pop_dz_age_sex$Year)
-# c
+max_pop_year <- max(pop_dz$Year)
 
 pop_hb_age_sex_quintile_year <- pop_dz %>%
   left_join(simd_main %>% select(DataZone, HB, 
