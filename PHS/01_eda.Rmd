@@ -12,7 +12,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 # prep.R file 
 source("R/prep.R")
 source("R/risk_model_data.R")
-source("R/discharge_model_data.R")
+source("R/admissions_model_data.R")
 
 # Make sure the figure output folders exist
 dir.create("figures/eda", recursive = TRUE, showWarnings = FALSE)
@@ -62,8 +62,7 @@ overall_monthly_trend <- month_demo_data %>%
 
 overall_monthly_trend_plt <- ggplot(
   overall_monthly_trend,
-  aes(x = m_date, y = total_attendances)
-) +
+  aes(x = m_date, y = total_attendances)) +
   geom_line(linewidth = 0.8) +
   geom_smooth(method = "loess", se = FALSE, linewidth = 1) +
   scale_y_continuous(labels = scales::comma) +
@@ -72,7 +71,9 @@ overall_monthly_trend_plt <- ggplot(
     y = "Total attendances",
     title = "Monthly A&E attendances over time"
   ) +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
+  
 
 overall_monthly_trend_plt
 
@@ -230,35 +231,22 @@ ggsave("figures/eda/attendances_by_age.pdf", plot = age_plt, width = 8, height =
 
 ```{r}
 age_sex_attendance <- month_demo_data %>%
-  filter(
-    !is.na(Age),
-    Sex %in% c("Male", "Female")
-  ) %>%
+  filter(!is.na(Age), Sex %in% c("Male", "Female")) %>%
   group_by(Age, Sex) %>%
-  summarise(
-    total = sum(NumberOfAttendances, na.rm = TRUE),
-    .groups = "drop"
-  )
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), 
+            .groups = "drop")
 
-age_sex_attendance_plt <- ggplot(
-  age_sex_attendance,
-  aes(x = Age, y = total, fill = Sex)
-) +
+age_sex_attendance_plt <- ggplot(age_sex_attendance,
+                                 aes(x = Age, y = total, fill = Sex)) +
   geom_col(position = "dodge") +
   scale_fill_discrete_phs(palette = "main") +
   scale_y_continuous(labels = scales::comma) +
-  labs(
-    x = "Age group",
-    y = "Total attendances",
-    title = "A&E attendances by age group and sex"
-  ) +
+  labs(x = "Age group",
+       y = "Total attendances",
+       title = "A&E attendances by age group and sex") +
   theme_phs() +
-  theme(
-    axis.text.x = element_text(
-      angle = 45,
-      hjust = 1
-    )
-  )
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5))
 
 age_sex_attendance_plt
 ```
@@ -266,15 +254,10 @@ age_sex_attendance_plt
 ```{r}
 # Deprivation converted to a labelled factor here 
 age_deprivation_data <- month_demo_data %>%
-  filter(
-    !is.na(Age),
-    !is.na(Deprivation)
-  ) %>%
+  filter(!is.na(Age),!is.na(Deprivation)) %>%
   group_by(Age, Deprivation) %>%
-  summarise(
-    total = sum(NumberOfAttendances, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), 
+            .groups = "drop") %>%
   mutate(Deprivation = factor(Deprivation, levels = 1:5,
            labels = c("1 (most deprived)", "2", "3", "4", "5 (least deprived)")))
 
@@ -290,7 +273,8 @@ age_deprivation_plt <- ggplot(age_deprivation_data,
        fill = "SIMD quintile",
        title = "Deprivation composition of attendances by age group") +
   theme_phs() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5))
 
 age_deprivation_plt
 
@@ -311,7 +295,8 @@ attendances_hist_plt <- ggplot(month_demo_data,
 
 attendances_hist_plt
 
-ggsave("figures/eda/attendances_histogram.pdf", plot = attendances_hist_plt, width = 8, height = 5)
+ggsave("figures/eda/attendances_histogram.pdf", plot = attendances_hist_plt, 
+       width = 8, height = 5)
 
 # Distribution of attendances log scale
 attendances_hist_log_plt <- ggplot(month_demo_data, 
@@ -326,7 +311,8 @@ attendances_hist_log_plt <- ggplot(month_demo_data,
 
 attendances_hist_log_plt
 
-ggsave("figures/eda/attendances_histogram_log.pdf", plot = attendances_hist_log_plt, width = 8, height = 5)
+ggsave("figures/eda/attendances_histogram_log.pdf", 
+       plot = attendances_hist_log_plt, width = 8, height = 5)
 ```
 
 # 2. Activity data
@@ -385,7 +371,8 @@ location_nweeks <- week_activity_data %>%
   filter(AttendanceCategory == "All") %>%
   count(TreatmentLocation, name = "n_weeks_reported") %>%
   left_join(trt_loc, by = c("TreatmentLocation" = "TreatmentLocationCode")) %>%
-  select(TreatmentLocation, TreatmentLocationName, HB, Status, n_weeks_reported) %>%
+  select(TreatmentLocation, TreatmentLocationName, HB, 
+         Status, n_weeks_reported) %>%
   arrange(n_weeks_reported)
 
 location_nweeks
@@ -414,7 +401,8 @@ location_attendance
 
 # Plot locations by number of attendances
 location_attendance_plt <- ggplot(location_attendance, 
-                                    aes(x = fct_reorder(TreatmentLocationName, avg_weekly_attendance), 
+                                    aes(x = fct_reorder(TreatmentLocationName, 
+                                                        avg_weekly_attendance), 
                                         y = avg_weekly_attendance)) +
   geom_col(fill = phs_colours("phs-blue")) +
   coord_flip() +
@@ -422,15 +410,13 @@ location_attendance_plt <- ggplot(location_attendance,
   labs(x = NULL, y = "Average Weekly Attendances",
        title = "NHS Scotland A&E Locations by Average Weekly Attendance") +
   theme_phs() +
-  theme(
-    axis.text.y = element_text(size = 9),
-    panel.grid.major.y = element_blank()
-  )
+  theme(axis.text.y = element_text(size = 9), 
+        panel.grid.major.y = element_blank())
 
 location_attendance_plt
 
-ggsave("figures/eda/location_avg_attendance.pdf", plot = location_attendance_plt, 
-       width = 8, height = 10)
+ggsave("figures/eda/location_avg_attendance.pdf", 
+       plot = location_attendance_plt, width = 8, height = 10)
 ```
 
 ```{r}
@@ -470,7 +456,8 @@ top10_codes <- trt_loc %>%
 # Plot locations by number of attendances
 top10_trend_overlay_plt <- location_year_attendance %>%
   filter(TreatmentLocationName %in% top10_locations) %>%
-  mutate(TreatmentLocationName = factor(TreatmentLocationName, levels = top10_locations)) %>%
+  mutate(TreatmentLocationName = factor(TreatmentLocationName, 
+                                        levels = top10_locations)) %>%
   ggplot(aes(x = year, 
              y = avg_weekly_attendance, 
              colour = TreatmentLocationName, group = TreatmentLocationName)) +
@@ -488,7 +475,8 @@ top10_trend_overlay_plt <- location_year_attendance %>%
 
 top10_trend_overlay_plt
 
-ggsave("figures/eda/top10_location_trend_overlay.pdf", plot = top10_trend_overlay_plt, width = 11, height = 6)
+ggsave("figures/eda/top10_location_trend_overlay.pdf", 
+       plot = top10_trend_overlay_plt, width = 11, height = 6)
 
 ```
 
@@ -504,11 +492,11 @@ summarise_columns(pop_data)
 ```{r}
 distinct(pop_data, Sex)
 
-n_distinct(pop_data$DataZone)   # should be 6976, per the dataset description
-# Confirm
+n_distinct(pop_data$DataZone)   
+
 pop_data %>% filter(DataZoneQF != "" | !is.na(DataZoneQF)) %>% 
   distinct(DataZone, DataZoneQF)
-n_distinct(simd_ind$Data_Zone)             # compare against what you already validated
+n_distinct(simd_ind$Data_Zone)             
 
 setdiff(unique(pop_data$DataZone), unique(simd_main$DataZone))
 setdiff(unique(simd_main$DataZone), unique(pop_data$DataZone))
@@ -522,14 +510,9 @@ national_total_new <- pop_data %>%
 
 sum(national_total_new$AllAges, na.rm = TRUE)
 
-# Compare against:
-sum(pop_hb_density$population)      # your NRS mid-2024 estimate
-sum(simd_hb$quintile_population)    # your SIMD 2020 population
+sum(pop_hb_density$population)     
+sum(simd_hb$quintile_population)  
 ```
-
-
-
-
 
 
 ```{r}
@@ -549,20 +532,15 @@ population_pyramid_data <- pop_hb_age_sex %>%
 
 population_pyramid_plt <- ggplot(
   population_pyramid_data,
-  aes(x = Age, y = plot_population, fill = Sex)
-) +
+  aes(x = Age, y = plot_population, fill = Sex)) +
   geom_col() +
   coord_flip() +
-  scale_y_continuous(
-    labels = ~ scales::comma(abs(.x))
-  ) +
+  scale_y_continuous(labels = ~ scales::comma(abs(.x))) +
   scale_fill_discrete_phs(palette = "main") +
-  labs(
-    x = "Age group",
-    y = "Population",
-    title = "Population distribution by age and sex"
-  ) +
-  theme_phs()
+  labs(x = "Age group", y = "Population",
+       title = "Population distribution by age and sex") +
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 population_pyramid_plt
 
@@ -579,22 +557,30 @@ pop_age_sex_plt <- pop_hb_age_sex %>%
   geom_col(position = "dodge") +
   scale_fill_discrete_phs(palette = "main") +
   scale_y_continuous(labels = scales::comma) +
-  labs(x = "Age Group", y = "Population", title = "Scotland Population by Age Group and Sex") +
-  theme_phs()
+  labs(x = "Age Group", y = "Population", 
+       title = "Scotland Population by Age Group and Sex") +
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 pop_age_sex_plt
 
-ggsave("figures/eda/population_by_age_sex.pdf", plot = pop_age_sex_plt, width = 8, height = 5)
+ggsave("figures/eda/population_by_age_sex.pdf", plot = pop_age_sex_plt, 
+       width = 8, height = 5)
 ```
 
 ```{r}
 # Population density by health board
-pop_density_plt <- ggplot(pop_hb_density, aes(x = fct_reorder(HB, density), y = density)) +
+pop_hb_density <- pop_hb_density %>%
+  left_join(hb_names, by = c("HB" = "HBT"))
+
+pop_density_plt <- ggplot(pop_hb_density, aes(x = fct_reorder(HBName, density),
+                                              y = density)) +
   geom_col(fill = phs_colours("phs-liberty")) +
   coord_flip() +
   labs(x = "Health Board", y = "Population Density (per km\u00b2)",
        title = "Population Density by Health Board") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 pop_density_plt
 
@@ -605,7 +591,8 @@ ggsave("figures/eda/population_density_by_hb.pdf", plot = pop_density_plt, width
 attendance_age_sex <- month_demo_data %>%
   filter(!is.na(Age), Sex %in% c("Male", "Female")) %>%
   group_by(Age, Sex) %>%
-  summarise(total_attendances = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
+  summarise(total_attendances = sum(NumberOfAttendances, na.rm = TRUE), 
+            .groups = "drop")
 
 population_age_sex <- pop_hb_age_sex %>%
   group_by(Age, Sex) %>%
@@ -615,14 +602,16 @@ age_sex_rates <- attendance_age_sex %>%
   left_join(population_age_sex, by = c("Age", "Sex")) %>%
   mutate(attendance_rate = total_attendances / population * 1000)
 
-age_sex_rate_plt <- ggplot(age_sex_rates, aes(x = Age, y = attendance_rate, colour = Sex, group = Sex)) +
+age_sex_rate_plt <- ggplot(age_sex_rates, aes(x = Age, y = attendance_rate, 
+                                              colour = Sex, group = Sex)) +
   geom_line(linewidth = 1) +
   geom_point() +
   scale_colour_discrete_phs(palette = "main") +
   labs(x = "Age group", y = "Attendances per 1,000 population",
        title = "Population-adjusted A&E attendance rates by age and sex") +
   theme_phs() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5))
 
 age_sex_rate_plt
 
@@ -633,7 +622,8 @@ ggsave("figures/eda/age_sex_attendance_rate.pdf", plot = age_sex_rate_plt,
 ```{r}
 hb_attendance <- month_demo_data %>%
   group_by(HBT) %>%
-  summarise(total_attendance = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
+  summarise(total_attendance = sum(NumberOfAttendances, na.rm = TRUE), 
+            .groups = "drop")
 
 hb_attendance_rates <- hb_attendance %>%
   left_join(
@@ -641,54 +631,38 @@ hb_attendance_rates <- hb_attendance %>%
       select(HB, population, density),
     by = c("HBT" = "HB")
   ) %>%
-  mutate(
-    rate_per_1000 =
-      total_attendance / population * 1000
-  )
+  mutate(rate_per_1000 = total_attendance / population * 1000)
+
+hb_attendance_rates <- hb_attendance_rates %>%
+  left_join(hb_names, by = "HBT")
 
 hb_rate_plt <- ggplot(
   hb_attendance_rates,
-  aes(
-    x = fct_reorder(HBT, rate_per_1000),
-    y = rate_per_1000
-  )
-) +
+  aes(x = fct_reorder(HBName, rate_per_1000), y = rate_per_1000)) +
   geom_col(fill = phs_colours("phs-blue")) +
   coord_flip() +
-  labs(
-    x = NULL,
-    y = "Attendances per 1,000 population",
-    title = "Population-adjusted attendance rates by health board"
-  ) +
-  theme_phs()
+  labs(x = NULL, y = "Attendances per 1,000 population",
+       title = "Population-adjusted attendance rates by health board") +
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 hb_rate_plt
 
-ggsave("figures/eda/hb_attendance_rate.pdf", plot = hb_rate_plt, width = 8, height = 6)
+ggsave("figures/eda/hb_attendance_rate.pdf", plot = hb_rate_plt, 
+       width = 8, height = 6)
 ```
 
 
 ```{r}
 density_rate_plt <- ggplot(
-  hb_attendance_rates,
-  aes(
-    x = density,
-    y = rate_per_1000,
-    label = HBT
-  )
-) +
+  hb_attendance_rates, aes(x = density, y = rate_per_1000, label = HBName)) +
   geom_point(size = 3, colour = phs_colours("phs-blue")) +
-  geom_smooth(
-    method = "lm",
-    se = TRUE,
-    colour = phs_colours("phs-rust")
-  ) +
-  labs(
-    x = "Population density per km²",
-    y = "Attendances per 1,000 population",
-    title = "Population density and A&E attendance rates"
-  ) +
-  theme_phs()
+  geom_smooth(method = "lm", se = TRUE, colour = phs_colours("phs-rust")) +
+  labs(x = "Population density per km^2", 
+       y = "Attendances per 1,000 population",
+       title = "Population density and A&E attendance rates") +
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 density_rate_plt
 
@@ -724,11 +698,13 @@ referrals_type_plt <- ggplot(referral_types,
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Total Attendances",
        title = "Attendances by Referral Source") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 referrals_type_plt
 
-ggsave("figures/eda/attendances_by_referral.pdf", plot = referrals_type_plt, width = 8, height = 5)
+ggsave("figures/eda/attendances_by_referral.pdf", plot = referrals_type_plt, 
+       width = 8, height = 5)
 ```
 
 ```{r}
@@ -753,7 +729,8 @@ referral_age_plt <- ggplot(referral_age_data,
   labs(x = "Age Group", y = "Total Attendances", fill = "Referral Source",
        title = "Attendances by Age Group and Referral Source") +
   theme_phs() +
-  theme(legend.text = element_text(size = 9), legend.key.size = unit(0.4, "cm"))
+  theme(legend.text = element_text(size = 9), legend.key.size = unit(0.4, "cm"),
+        plot.title = element_text(hjust = 0.5))
 
 referral_age_plt
 
@@ -775,18 +752,18 @@ referral_top10_pct <- referral_top10_data %>%
   ungroup()
 
 referral_table_plt <- ggplot(referral_top10_pct, 
-                                aes(x = Referral, y = TreatmentLocationName, fill = pct)) +
+                                aes(x = Referral, 
+                                    y = TreatmentLocationName, fill = pct)) +
   geom_tile(colour = "white") +
   geom_text(aes(label = round(pct, 0)), size = 3, colour = "black") +
-  scale_fill_gradient(low = "white", high = phs_colours("phs-blue"), name = "% of\nattendances") +
+  scale_fill_gradient(low = "white", high = phs_colours("phs-blue"), 
+                      name = "% of\nattendances") +
   labs(x = "Referral Source", y = NULL,
        title = "Referral Source Percentages by Top 10 A&E Locations") +
   theme_phs() +
-  theme(
-    axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 9),
-    panel.grid = element_blank()
-  )
+  theme(axis.text.x = element_text(size = 9, angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 9),
+        panel.grid = element_blank())
 
 referral_table_plt
 
@@ -794,7 +771,6 @@ ggsave("figures/eda/referral_table_top10.pdf", plot = referral_table_plt, width 
 ```
 
 Unir monthly activity with referrals:
-
 
 
 # 6. Discharges
@@ -816,17 +792,20 @@ discharge_types <- discharges_data %>%
   summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
 
 discharge_type_plt <- ggplot(discharge_types, 
-                              aes(x = fct_reorder(Discharge, total), y = total)) +
+                              aes(x = fct_reorder(Discharge, total), 
+                                  y = total)) +
   geom_col(fill = phs_colours("phs-graphite")) +
   coord_flip() +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Total Attendances",
        title = "Attendances by Discharge Type") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 discharge_type_plt
 
-ggsave("figures/eda/attendances_by_discharge.pdf", plot = discharge_type_plt, width = 8, height = 5)
+ggsave("figures/eda/attendances_by_discharge.pdf", plot = discharge_type_plt, 
+       width = 8, height = 5)
 ```
 
 
@@ -850,7 +829,8 @@ discharge_age_plt <- ggplot(discharge_age_data,
   labs(x = "Age Group", y = "Total Attendances", fill = "Discharge Type",
        title = "Attendances by Age Group and Discharge Type") +
   theme_phs() +
-  theme(legend.text = element_text(size = 9), legend.key.size = unit(0.4, "cm"))
+  theme(legend.text = element_text(size = 9), legend.key.size = unit(0.4, "cm"),
+        plot.title = element_text(hjust = 0.5))
 
 discharge_age_plt
 
@@ -864,14 +844,18 @@ admission_rate_trend <- discharges_data %>%
   group_by(m_date) %>%
   summarise(
     total_attendances = sum(NumberOfAttendances, na.rm = TRUE),
-    admitted = sum(NumberOfAttendances[Discharge == "Admission to same Hospital"], na.rm = TRUE),  # adjust label
+    admitted = sum(NumberOfAttendances[
+      Discharge == "Admission to same Hospital"], 
+      na.rm = TRUE), 
     .groups = "drop"
   ) %>%
   mutate(admission_rate = admitted / total_attendances * 100)
 
-admission_rate_plt <- ggplot(admission_rate_trend, aes(x = m_date, y = admission_rate)) +
+admission_rate_plt <- ggplot(admission_rate_trend, aes(x = m_date, 
+                                                       y = admission_rate)) +
   geom_line(linewidth = 0.8, colour = phs_colours("phs-rust")) +
-  geom_smooth(method = "loess", se = FALSE, linewidth = 1, colour = phs_colours("phs-blue")) +
+  geom_smooth(method = "loess", se = FALSE, linewidth = 1, 
+              colour = phs_colours("phs-blue")) +
   scale_y_continuous(labels = scales::percent_format(scale = 1)) +
   labs(x = NULL, y = "Admission Rate (%)",
        title = "A&E Admission Rate Over Time") +
@@ -879,7 +863,8 @@ admission_rate_plt <- ggplot(admission_rate_trend, aes(x = m_date, y = admission
 
 admission_rate_plt
 
-ggsave("figures/eda/admission_rate_trend.pdf", plot = admission_rate_plt, width = 9, height = 5)
+ggsave("figures/eda/admission_rate_trend.pdf", plot = admission_rate_plt,
+       width = 9, height = 5)
 ```
 
 
@@ -925,14 +910,16 @@ freq_by_deprivation <- mul_att_long %>%
   mutate(Deprivation = factor(Deprivation, levels = 1:5,
            labels = c("1 (most deprived)", "2", "3", "4", "5 (least deprived)")))
 
-att_freq_dep_plot <- ggplot(freq_by_deprivation, aes(x = Deprivation, y = pct, fill = attendance_freq)) +
+att_freq_dep_plot <- ggplot(freq_by_deprivation, aes(x = Deprivation, y = pct, 
+                                                     fill = attendance_freq)) +
   geom_col(position = "fill") +
   scale_fill_manual(values = phs_colours(c("phs-blue", "phs-teal", "phs-green",
                                              "phs-graphite", "phs-rust"))) +
   scale_y_continuous(labels = scales::percent_format(scale = 1)) +
   labs(x = "Deprivation Quintile", y = "Share of Patients", fill = "Attendances",
        title = "Attendance Frequency Composition by Deprivation Quintile") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 att_freq_dep_plot
 ```
@@ -946,7 +933,8 @@ att_freq_by_age <- mul_att_long %>%
   group_by(Age) %>%
   mutate(pct = n_patients / sum(n_patients) * 100)
 
-att_freq_age_plot <- ggplot(att_freq_by_age, aes(x = Age, y = pct, fill = attendance_freq)) +
+att_freq_age_plot <- ggplot(att_freq_by_age, aes(x = Age, y = pct, 
+                                                 fill = attendance_freq)) +
   geom_col(position = "fill") +
   scale_fill_manual(values = phs_colours(c("phs-blue", "phs-teal", "phs-green",
                                              "phs-graphite", "phs-rust"))) +
@@ -954,7 +942,8 @@ att_freq_age_plot <- ggplot(att_freq_by_age, aes(x = Age, y = pct, fill = attend
   labs(x = "Age Group", y = "Share of Patients", fill = "Attendances",
        title = "Attendance Frequency Composition by Age Group") +
   theme_phs() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+        plot.title = element_text(hjust = 0.5))
 
 att_freq_age_plot 
 ```
@@ -981,7 +970,8 @@ referral_mix_by_hb <- referrals_data %>%
   group_by(HBT) %>%
   summarise(
     total = sum(NumberOfAttendances, na.rm = TRUE),
-    self_referral = sum(NumberOfAttendances[Referral == "Self Referral"], na.rm = TRUE),
+    self_referral = sum(NumberOfAttendances[Referral == "Self Referral"], 
+                        na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(self_referral_pct = self_referral / total * 100)
@@ -990,14 +980,16 @@ ecological_compare <- freq_rate_by_hb %>%
   left_join(referral_mix_by_hb, by = "HBT")
 
 self_referral_freq_plt <- ggplot(ecological_compare,
-                                  aes(x = self_referral_pct, y = freq_pct, label = HBT)) +
+                                  aes(x = self_referral_pct, y = freq_pct, 
+                                      label = HBT)) +
   geom_point(size = 3, colour = phs_colours("phs-blue")) +
   geom_smooth(method = "lm", se = TRUE, colour = phs_colours("phs-rust")) +
   labs(x = "Self-Referral Share (%)", y = "Frequent Attender Share (%)",
-       title = "Self-Referral Rate vs. Frequent Attendance Rate, by Health Board",
-       caption = "Ecological (area-level) comparison across 14 health boards - not a patient-level relationship") +
+       title = "Self-Referral Rate vs. Frequent Attendance Rate, 
+                by Health Board")+
   theme_phs() +
-  theme(plot.caption = element_text(size = 8, hjust = 0, colour = "grey40"))
+  theme(plot.caption = element_text(size = 8, hjust = 0, colour = "grey40"), 
+        plot.title = element_text(hjust = 0.5))
 
 self_referral_freq_plt
 
@@ -1017,22 +1009,29 @@ head(when_data)
 ```{r}
 when_heatmap_data <- when_data %>%
   group_by(Day, Hour) %>%
-  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop") %>%
-  mutate(Day = factor(Day, levels = c("Monday", "Tuesday", "Wednesday", "Thursday",
-                                        "Friday", "Saturday", "Sunday")))
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), 
+            .groups = "drop") %>%
+  mutate(Day = factor(Day, 
+                      levels = c("Monday", "Tuesday", "Wednesday", 
+                                 "Thursday", "Friday", "Saturday", "Sunday")))
 
-when_heatmap_plt <- ggplot(when_heatmap_data, aes(x = Hour, y = Day, fill = total)) +
+when_heatmap_plt <- ggplot(when_heatmap_data, aes(x = Hour, y = Day, 
+                                                  fill = total)) +
   geom_tile(colour = "white") +
-  scale_fill_gradient(low = "white", high = phs_colours("phs-blue"), labels = scales::comma,
-                       name = "Total\nAttendances") +
-  labs(x = "Hour of Day", y = NULL, title = "A&E Attendances by Day of Week and Hour") +
+  scale_fill_gradient(low = "white", high = phs_colours("phs-blue"), 
+                      labels = scales::comma, name = "Total\nAttendances") +
+  labs(x = "Hour of Day", y = NULL, 
+       title = "A&E Attendances by Day of Week and Hour") +
   theme_phs() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
-        panel.grid = element_blank())
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+    panel.grid = element_blank(),
+    plot.title = element_text(hjust = 0.5))
 
 when_heatmap_plt
 
-ggsave("figures/eda/when_heatmap.pdf", plot = when_heatmap_plt, width = 12, height = 6)
+ggsave("figures/eda/when_heatmap.pdf", plot = when_heatmap_plt, 
+       width = 12, height = 6)
 ```
 
 
@@ -1042,22 +1041,26 @@ oohours_trend <- when_data %>%
   group_by(m_date) %>%
   summarise(
     total = sum(NumberOfAttendances, na.rm = TRUE),
-    out_of_hours = sum(NumberOfAttendances[InOut == "Out of Hours"], na.rm = TRUE),
+    out_of_hours = sum(NumberOfAttendances[InOut == "Out of Hours"], 
+                       na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(oohours_pct = out_of_hours / total * 100)
 
 oohours_trend_plt <- ggplot(oohours_trend, aes(x = m_date, y = oohours_pct)) +
   geom_line(linewidth = 0.8, colour = phs_colours("phs-rust")) +
-  geom_smooth(method = "loess", se = FALSE, linewidth = 1, colour = phs_colours("phs-blue")) +
+  geom_smooth(method = "loess", se = FALSE, linewidth = 1, 
+              colour = phs_colours("phs-blue")) +
   scale_y_continuous(labels = scales::percent_format(scale = 1)) +
   labs(x = NULL, y = "Out-of-Hours Share (%)",
        title = "Out-of-Hours A&E Attendance Share Over Time") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 oohours_trend_plt
 
-ggsave("figures/eda/oohours_trend.pdf", plot = oohours_trend_plt, width = 9, height = 5)
+ggsave("figures/eda/oohours_trend.pdf", plot = oohours_trend_plt, 
+       width = 9, height = 5)
 ```
 
 ```{r}
@@ -1066,22 +1069,30 @@ oohours_by_hb <- when_data %>%
   group_by(HBT) %>%
   summarise(
     total = sum(NumberOfAttendances, na.rm = TRUE),
-    out_of_hours = sum(NumberOfAttendances[InOut == "Out of Hours"], na.rm = TRUE),
+    out_of_hours = sum(NumberOfAttendances[InOut == "Out of Hours"], 
+                       na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(oohours_pct = out_of_hours / total * 100)
 
-oohours_by_hb_plt <- ggplot(oohours_by_hb, aes(x = fct_reorder(HBT, oohours_pct), y = oohours_pct)) +
+oohours_by_hb <- oohours_by_hb %>%
+  left_join(hb_names, by = "HBT")
+
+oohours_by_hb_plt <- ggplot(oohours_by_hb, 
+                            aes(x = fct_reorder(HBName, oohours_pct), 
+                                y = oohours_pct)) +
   geom_col(fill = phs_colours("phs-rust")) +
   coord_flip() +
   scale_y_continuous(labels = scales::percent_format(scale = 1)) +
   labs(x = NULL, y = "Out-of-Hours Share (%)",
        title = "Out-of-Hours A&E Attendance Share by Health Board") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 oohours_by_hb_plt
 
-ggsave("figures/eda/oohours_by_hb.pdf", plot = oohours_by_hb_plt, width = 8, height = 6)
+ggsave("figures/eda/oohours_by_hb.pdf", plot = oohours_by_hb_plt, 
+       width = 8, height = 6)
 ```
 
 
@@ -1090,13 +1101,16 @@ weekend_trend <- when_data %>%
   group_by(m_date, Week) %>%
   summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
 
-ggplot(weekend_trend, aes(x = m_date, y = total, colour = Week)) +
+weekend_trend_plt <- ggplot(weekend_trend, aes(x = m_date, y = total, colour = Week)) +
   geom_line(linewidth = 1) +
   scale_colour_discrete_phs(palette = "main") +
   scale_y_continuous(labels = scales::comma) +
   labs(x = NULL, y = "Total Attendances", colour = NULL,
        title = "A&E Attendances Over Time: Weekday vs. Weekend") +
-  theme_phs()
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+weekend_trend_plt
 ```
 
 # 9. SIMD data 

@@ -449,7 +449,7 @@ aic_log
 final_risk_model_A <- bam(
   NumberOfAttendances ~
     Age * Sex + Age * Deprivation + oohours_pct + weekend_pct +
-    s(t, k = 35) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    s(t, k = 40) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
     offset(log(population)),
   family = nb(),
   data = risk_data,
@@ -510,35 +510,122 @@ final_coefs_B$rr_lower <- exp(final_coefs_B$Estimate - 1.96 * final_coefs_B$`Std
 final_coefs_B$rr_upper <- exp(final_coefs_B$Estimate + 1.96 * final_coefs_B$`Std. Error`)
 final_coefs_B
 ```
-## 5.4 Interaction interpretation
 
-### Age × Deprivation
 
-The deprivation-attendance gradient is not uniform across age groups:
+# 6. Supplementary analyses
 
-- **Working-age adults (25-39, 40-64)**: interactions are negative — the
-  deprivation gap is WIDER for this group than the 18-24 reference. Being
-  less deprived reduces attendance risk more for working-age adults than
-  for young adults.
+## 6.1 Fixed-effect HB version
 
-- **Elderly (75 plus)**: interactions are large and positive — the
-  deprivation gap is NARROWER for the elderly. Health need driven by age
-  itself becomes the dominant driver, partially overriding socioeconomic
-  differences.
+```{r}
+# Final model with Deprivation quintile
+final_risk_model_hb <- bam(
+  NumberOfAttendances ~
+    Age * Sex + Age * Deprivation + oohours_pct + weekend_pct + HBT +
+    s(t, k = 40) + s(m_num, bs = "cc", k = 12) +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
 
-- **Under 18**: interactions are also positive — the deprivation gap is
-  narrower for children, whose A&E use is often driven by parental
-  concern/acute illness rather than the chronic conditions that track
-  deprivation more strongly in adults.
+# Extract and rank HB rate ratios
+hb_coefs <- as.data.frame(summary(final_risk_model_hb)$p.table)
+hb_coefs$term <- rownames(hb_coefs)
+hb_coefs <- hb_coefs %>%
+  filter(grepl("^HBT", term)) %>%
+  mutate(
+    HBT = gsub("^HBT", "", term),
+    rate_ratio = exp(Estimate),
+    rr_lower = exp(Estimate - 1.96 * `Std. Error`),
+    rr_upper = exp(Estimate + 1.96 * `Std. Error`)
+  ) %>%
+  arrange(desc(rate_ratio))
 
-- **65-74**: interactions are small and mostly non-significant — a
-  transitional band between the working-age and 75+ patterns.
+hb_coefs
+```
 
-### Age × Sex
 
-Males have modestly higher attendance rates than females across most age
-groups, with the gender gap varying by age band. The largest male excess
-is in the Under 18 group.
+```{r}
+hb_coefs_plt <- ggplot(hb_coefs, aes(x = fct_reorder(HBT, rate_ratio), y = rate_ratio)) +
+  geom_point(colour = phs_colours("phs-blue"), size = 3) +
+  geom_errorbar(aes(ymin = rr_lower, ymax = rr_upper), width = 0.3,
+                colour = phs_colours("phs-blue")) +
+  geom_hline(yintercept = 1, linetype = "dashed", colour = "grey30") +
+  coord_flip() +
+  labs(x = NULL, y = "Rate Ratio (vs. reference HB)",
+       title = "Health Board Attendance Rate Ratios\n(adjusted for Age, Sex, Deprivation, interactions)") +
+  theme_phs()
 
-# 6. Other analyses
+hb_coefs_plt
+
+# ggsave("figures/risk_model/hb_rate_ratios.pdf", plot = hb_coefs_plt, width = 8, height = 6)
+```
+
+
+## 6.2 GAM robustness check
+Refit the final specifications with gam not bam 
+
+```{r}
+# Final model with Deprivation quintile
+final_risk_model_A_gam <- gam(
+  NumberOfAttendances ~
+    Age * Sex + Age * Deprivation + oohours_pct + weekend_pct +
+    s(t, k = 40) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+# add comparison of coeffs
+```
+
+```{r}
+# Final model with Deprivation indicators
+final_risk_model_B_gam <- gam(
+  NumberOfAttendances ~
+    Age * Sex + Income_rate + EMERG + crime_rate + drive_GP +
+    oohours_pct + weekend_pct +
+    s(t, k = 35) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
+    offset(log(population)),
+  family = nb(),
+  data = risk_data,
+  method = "REML"
+)
+
+# add comparison of coeffs
+```
+
+
+## 6.3 INLA robustness check
+
+Refit the final specification A in INLA to confirm consistency across
+frequentist (GAM) and Bayesian (INLA) estimation frameworks.
+
+```{r}
+risk_data_inla <- risk_data %>%
+  mutate(
+    HBT_id = as.numeric(HBT),
+    t_rounded = round(t)
+  )
+
+inla_risk <- inla(
+  NumberOfAttendances ~
+    Age * Sex + Age * Deprivation + oohours_pct + weekend_pct +
+    f(t_rounded, model = "rw2", constr = TRUE) +
+    f(m_num, model = "rw1", cyclic = TRUE, constr = TRUE) +
+    f(HBT_id, model = "iid") +
+    offset(log(population)),
+  family = "nbinomial",
+  data = risk_data_inla,
+  control.compute = list(dic = TRUE, waic = TRUE),
+  control.predictor = list(compute = TRUE)
+)
+
+summary(inla_risk)
+```
+
+
+
+
 

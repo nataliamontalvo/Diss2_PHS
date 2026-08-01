@@ -122,6 +122,25 @@ pop_hb_age_sex <- pop_dz %>%
   group_by(HB, Sex, Age) %>%
   summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
 
+# HB name mapping (for plot labels throughout the analysis)
+hb_names <- tribble(
+  ~HBT,          ~HBName,
+  "S08000015",   "Ayrshire and Arran",
+  "S08000016",   "Borders",
+  "S08000017",   "Dumfries and Galloway",
+  "S08000019",   "Forth Valley",
+  "S08000020",   "Grampian",
+  "S08000022",   "Highland",
+  "S08000024",   "Lothian",
+  "S08000025",   "Orkney",
+  "S08000026",   "Shetland",
+  "S08000028",   "Western Isles",
+  "S08000029",   "Fife",
+  "S08000030",   "Tayside",
+  "S08000031",   "Greater Glasgow and Clyde",
+  "S08000032",   "Lanarkshire"
+)
+
 
 # 3. Age/sex risk model data --------------------------------------------------
 
@@ -216,7 +235,8 @@ combined_model_data <- month_demo_data %>%
                                quintile_population),
             by = c("HBT" = "HB", "Deprivation" = "Quintile")) %>%
   left_join(when_hb_monthly, by = c("Month", "HBT")) %>%
-  left_join(referral_hb_age_monthly, by = c("Month", "HBT", "Age"))
+  left_join(referral_hb_age_monthly, by = c("Month", "HBT", "Age"))%>%
+  left_join(hb_names, by = "HBT")
 
 ## 5.2 Checks
 
