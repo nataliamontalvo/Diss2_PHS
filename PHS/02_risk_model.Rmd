@@ -67,13 +67,6 @@ cat("Rows excluded:", nrow(combined_model_data) - nrow(risk_data), "\n")
 
 # 2. Baseline model
 
-```
-NumberOfAttendances ~ Age + Sex + Deprivation +
-  s(t, k = 30) + s(m_num, bs = "cc", k = 12) + s(HBT, bs = "re") +
-  offset(log(population))
-family = nb(), method = "REML"
-```
-
 ```{r}
 baseline_model <- bam(NumberOfAttendances ~ 
                         Age + Sex + Deprivation +
@@ -83,7 +76,7 @@ baseline_model <- bam(NumberOfAttendances ~
                         offset(log(population)),
                       family = nb(),
                       data = risk_data,
-                      method = "REML")
+                      method = "ML")
 
 summary(baseline_model)
 ```
@@ -112,7 +105,7 @@ poisson_model <- bam(NumberOfAttendances ~
                        offset(log(population)),
                      family = poisson(),
                      data = risk_data,
-                     method = "REML")
+                     method = "ML")
 
 # Dispersion ratio: should be ~1 for Poisson; >>1 indicates overdispersion
 dispersion_ratio <- sum(residuals(poisson_model, type = "deviance")^2) /
@@ -162,8 +155,8 @@ baseline_aic <- AIC(baseline_model)
 
 aic_log <- tribble(
   ~model, ~aic, ~delta_aic, ~note,
-  "baseline", baseline_aic, 0, "Age + Sex + Deprivation + smooths"
-)
+  "baseline", baseline_aic, 0, "Age + Sex + Deprivation + smooths")
+
 aic_log
 ```
 
@@ -189,7 +182,7 @@ model_income <- bam(NumberOfAttendances ~
                         offset(log(population)),
                       family = nb(),
                       data = risk_data,
-                      method = "REML")
+                      method = "ML")
 
 summary(model_income)
 
@@ -215,7 +208,7 @@ model_emerg <- bam(NumberOfAttendances ~
                      offset(log(population)),
                    family = nb(),
                    data = risk_data,
-                  method = "REML")
+                  method = "ML")
 
 summary(model_emerg)
 
@@ -241,7 +234,7 @@ model_external <- bam(NumberOfAttendances ~
                         offset(log(population)),
                       family = nb(),
                       data = risk_data,
-                      method = "REML")
+                      method = "ML")
 
 summary(model_external)
 
@@ -276,6 +269,25 @@ causal predictors.
 
 ## 3.4 Domain indicators replacing Deprivation
 
+Before fitting, examine inter-correlation among the available indicators. 
+
+```{r}
+cor_matrix <- risk_data %>%
+  select(Income_rate, Employment_rate, EMERG, crime_rate, 
+         ALCOHOL, DRUG, drive_GP) %>%
+  cor(use = "pairwise.complete.obs")
+
+round(cor_matrix, 2)
+```
+
+Income_rate, Employment_rate, EMERG, DRUG, and ALCOHOL are all correlated 
+at r = 0.85–0.99, reflecting the occurrence of multiple deprivation dimensions 
+in the same areas. 
+drive_GP is the only indicator negatively correlated with the others 
+(r = -0.19 to -0.38), capturing a distinct geographic access dimension. 
+
+Employment_rate (r = 0.99 with Income_rate) was excluded from all specifications.
+
 ```{r}
 model_indicators <- bam(NumberOfAttendances ~
                           Age + Sex + Income_rate + EMERG + crime_rate + 
@@ -286,7 +298,7 @@ model_indicators <- bam(NumberOfAttendances ~
                           offset(log(population)),
                         family = nb(),
                         data = risk_data,
-                        method = "REML")
+                        method = "ML")
 
 summary(model_indicators)
 
@@ -299,13 +311,58 @@ aic_log <- aic_log %>% add_row(
 aic_log
 ```
 
-All predictors significant. Income_rate is the strongest driver. crime_rate
-shows a negative sign, among areas with similar income deprivation levels,
-those with higher crime rates tend to have slightly lower attendance,
-possibly because high-crime areas in Scotland tend to be dense urban
-locations with better access to both A&E and alternative services.
+All predictors significant:
+- Income_rate is the strongest driver. 
+- EMERG shows a small positive association, indicating areas with higher 
+  historical emergency burden continue to generate higher A&E demand.
+- crime_rate shows a negative sign, among areas with similar income deprivation 
+  levels, those with higher crime rates tend to have slightly lower attendance,
+  possibly because high-crime areas in Scotland tend to be dense urban
+  locations with better access to both A&E and alternative services.
+- drive_GP negative, same rurality reasoning: remote areas have long GP 
+  drive times but also long A&E drive times.
+  
+  
+```{r}
+# Testing whether additional indicators add predictive value
+model_indicators_full <- bam(NumberOfAttendances ~
+                          Age + Sex + Income_rate + EMERG + crime_rate + 
+                          ALCOHOL + DRUG + drive_GP + 
+                          oohours_pct + weekend_pct +
+                          s(t, k = 35) + 
+                          s(m_num, bs = "cc", k = 12) + 
+                          s(HBT, bs = "re") +
+                          offset(log(population)),
+                        family = nb(),
+                        data = risk_data,
+                        method = "ML")
+
+summary(model_indicators_full)
+
+aic_log <- aic_log %>% add_row(
+  model = "indicators + alcohol/drug",
+  aic = AIC(model_indicators_full),
+  delta_aic = AIC(model_indicators_full) - baseline_aic,
+  note = "SIMD domain indicators + ALCOHOL and DRUG"
+)
+aic_log
+```
+
+AIC improved by a further 1703 points, but coefficient instability 
+consistent with the high correlations seen above:
+
+- Income_rate more than doubled (1.50 --> 3.33), inflated by the correlated 
+  negative ALCOHOL/DRUG effects.
+- ALCOHOL and DRUG both negative, same suppression pattern as crime_rate: at a 
+  given income deprivation level, areas with higher alcohol/drug burden tend to 
+  be dense urban areas with better service access.
+- crime_rate shrank and became barely significant (p = 0.002).
+  
+The simpler specification was retained, its coefficients are individually 
+interpretable and the key finding (income deprivation dominates) is unaffected. 
 
 ```{r}
+# Sensitivity check: removing crime_rate
 model_indicators_nocrime <- bam(NumberOfAttendances ~
                                   Age + Sex + Income_rate + EMERG + drive_GP +
                                   oohours_pct + weekend_pct +
@@ -315,7 +372,7 @@ model_indicators_nocrime <- bam(NumberOfAttendances ~
                                   offset(log(population)),
                                 family = nb(),
                                 data = risk_data,
-                                method = "REML")
+                                method = "ML")
 
 summary(model_indicators_nocrime)
 
@@ -349,7 +406,7 @@ model_self_ref <- bam(NumberOfAttendances ~
                         offset(log(population)),
                       family = nb(),
                       data = risk_data,
-                      method = "REML")
+                      method = "ML")
 
 summary(model_self_ref)
 
@@ -382,7 +439,7 @@ model_interaction_age_sex <- bam(NumberOfAttendances ~
                                    offset(log(population)),
                                  family = nb(),
                                  data = risk_data,
-                                 method = "REML")
+                                 method = "ML")
 
 summary(model_interaction_age_sex)
 
@@ -408,7 +465,7 @@ model_interaction_age_dep <- bam(NumberOfAttendances ~
                                    offset(log(population)),
                                  family = nb(),
                                  data = risk_data,
-                                 method = "REML")
+                                 method = "ML")
 
 summary(model_interaction_age_dep)
 
@@ -432,7 +489,7 @@ model_both_interactions <- bam(NumberOfAttendances ~
                                  offset(log(population)),
                                family = nb(),
                                data = risk_data,
-                               method = "REML")
+                               method = "ML")
 
 summary(model_both_interactions)
 
@@ -446,7 +503,12 @@ aic_log
 ```
 
 
-# 5. Final Model
+# 5. Final Model 
+
+All model comparisons above used ML estimation, which provides a valid 
+likelihood for comparing models with different fixed-effect structures. The 
+final selected specifications are refitted below using REML, which gives less 
+biased estimates of variance components and smoothing parameters for inference.
 
 ```{r}
 # Final model with Deprivation quintile
@@ -457,9 +519,17 @@ final_risk_model_A <- bam(
     offset(log(population)),
   family = nb(),
   data = risk_data,
-  method = "REML"
-)
+  method = "REML")
 
+summary(final_risk_model_A)
+```
+
+Model A uses k = 40 for s(t) rather than k = 35 used during model selection. 
+The Age × Deprivation interaction (20 additional parameters) altered the 
+residual structure, causing s(t) at k = 35 to absorb seasonal oscillation into 
+the trend. Increasing to k = 40 resolved this.
+
+```{r}
 # Final model with Deprivation indicators
 final_risk_model_B <- bam(
   NumberOfAttendances ~
@@ -469,8 +539,9 @@ final_risk_model_B <- bam(
     offset(log(population)),
   family = nb(),
   data = risk_data,
-  method = "REML"
-)
+  method = "REML")
+
+summary(final_risk_model_B)
 ```
 
 ## 5.1 Diagnostics
@@ -515,6 +586,7 @@ final_coefs_A$rr_upper <- exp(final_coefs_A$Estimate + 1.96 * final_coefs_A$`Std
 final_coefs_A
 ```
 
+
 ```{r}
 final_coefs_B <- as.data.frame(summary(final_risk_model_B)$p.table)
 final_coefs_B$rate_ratio <- exp(final_coefs_B$Estimate)
@@ -523,20 +595,123 @@ final_coefs_B$rr_upper <- exp(final_coefs_B$Estimate + 1.96 * final_coefs_B$`Std
 final_coefs_B
 ```
 
+```{r}
+concurvity(final_risk_model_B, full = TRUE)
+```
+
+
+## 5.4 Predicted rates and interaction visualisation
+
+Because Model A includes Age × Sex and Age × Deprivation interactions, 
+the main-effect coefficients are conditional: 
+- the Age rate ratios apply to females in deprivation quintile 1 (the reference 
+  categories)
+- the Sex rate ratio applies to 18-24 year olds
+- the Deprivation rate ratios apply to 18-24 year olds. 
+
+The interaction terms show how these effects differ for other combinations. 
+Predicted rates below provide population-averaged comparisons.
+
+```{r}
+# Create prediction grid
+pred_grid <- expand.grid(
+  Age = levels(risk_data$Age),
+  Sex = levels(risk_data$Sex),
+  Deprivation = levels(risk_data$Deprivation)
+) %>%
+  mutate(
+    oohours_pct = mean(risk_data$oohours_pct, na.rm = TRUE),
+    weekend_pct = mean(risk_data$weekend_pct, na.rm = TRUE),
+    t = median(risk_data$t),
+    m_num = 6,
+    HBT = levels(risk_data$HBT)[1],
+    population = 10000   # per 10,000 population
+  )
+
+pred_grid$predicted <- predict(final_risk_model_A, newdata = pred_grid,
+                                type = "response")
+pred_grid$rate_per_10k <- pred_grid$predicted
+```
+
+
+```{r}
+# Deprivation gradient by age group — shows the interaction directly
+dep_by_age_plt <- pred_grid %>%
+  group_by(Age, Deprivation) %>%
+  summarise(rate_per_10k = mean(rate_per_10k), .groups = "drop") %>%
+  ggplot(aes(x = Deprivation, y = rate_per_10k, colour = Age, group = Age)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(x = "Deprivation Quintile (1 = most deprived)",
+       y = "Predicted attendances per 10,000 population",
+       title = "Deprivation gradient varies by age group",
+       colour = "Age group") +
+  theme_phs()
+
+dep_by_age_plt
+
+ggsave("figures/risk_model/dep_gradient_by_age.pdf", 
+       plot = dep_by_age_plt, width = 8, height = 6)
+```
+
+
+```{r}
+sex_by_age_plt <- pred_grid %>%
+  group_by(Age, Sex) %>%
+  summarise(rate_per_10k = mean(rate_per_10k), .groups = "drop") %>%
+  ggplot(aes(x = Age, y = rate_per_10k, fill = Sex)) +
+  geom_col(position = "dodge") +
+  labs(x = "Age group",
+       y = "Predicted attendances per 10,000 population",
+       title = "Male-female gap varies by age group") +
+  theme_phs()
+
+sex_by_age_plt
+
+ggsave("figures/risk_model/sex_gap_by_age.pdf",
+       plot = sex_by_age_plt, width = 8, height = 6)
+```
+
+
+```{r}
+heatmap_plt <- pred_grid %>%
+  filter(Sex == "Female") %>%   # one sex to keep it readable
+  ggplot(aes(x = Deprivation, y = Age, fill = rate_per_10k)) +
+  geom_tile() +
+  geom_text(aes(label = round(rate_per_10k, 0)), size = 3) +
+  scale_fill_gradient(low = "white", high = phs_colours("phs-blue")) +
+  labs(x = "Deprivation Quintile", y = "Age group",
+       fill = "Rate per\n10,000",
+       title = "Predicted A&E attendance rate (females)") +
+  theme_phs()
+
+heatmap_plt
+
+ggsave("figures/risk_model/rate_heatmap_female.pdf",
+       plot = heatmap_plt, width = 7, height = 5)
+```
+
 
 # 6. Supplementary analyses
 
 ## 6.1 Fixed-effect HB version
 
+Run the final Model A specification with HBT as a fixed effect instead of 
+a random effect, to extract and rank individual health board coefficients.
+
 ```{r}
-# Final model with Deprivation quintile
+# Set reference HB for this analysis only
+risk_data_hb <- risk_data %>%
+  mutate(HBT = relevel(HBT, ref = "S08000031"))
+
 final_risk_model_hb <- bam(
   NumberOfAttendances ~
     Age * Sex + Age * Deprivation + oohours_pct + weekend_pct + HBT +
-    s(t, k = 40) + s(m_num, bs = "cc", k = 12) +
+    s(t, k = 40) + 
+    s(m_num, bs = "cc", k = 12) +
     offset(log(population)),
   family = nb(),
-  data = risk_data,
+  data = risk_data_hb,
   method = "REML"
 )
 
@@ -552,6 +727,12 @@ hb_coefs <- hb_coefs %>%
     rr_upper = exp(Estimate + 1.96 * `Std. Error`)
   ) %>%
   left_join(hb_names, by = "HBT") %>%
+  # Add reference board back at RR = 1
+  bind_rows(tibble(
+    HBT = "S08000031",
+    HBName = "Greater Glasgow and Clyde",
+    rate_ratio = 1, rr_lower = 1, rr_upper = 1
+  )) %>%
   arrange(desc(rate_ratio))
 
 hb_coefs
@@ -559,20 +740,25 @@ hb_coefs
 
 
 ```{r}
-hb_coefs_plt <- ggplot(hb_coefs, aes(x = fct_reorder(HBName, rate_ratio), 
-                                     y = rate_ratio)) +
-  geom_point(colour = phs_colours("phs-blue"), size = 3) +
+hb_coefs_plt <- ggplot(hb_coefs, 
+                        aes(x = fct_reorder(HBName, rate_ratio), 
+                            y = rate_ratio)) +
+  geom_point(aes(colour = rate_ratio == 1), size = 3, show.legend = FALSE) +
+  scale_colour_manual(values = c("TRUE" = "grey50", 
+                                  "FALSE" = phs_colours("phs-blue"))) +
   geom_errorbar(aes(ymin = rr_lower, ymax = rr_upper), width = 0.3,
                 colour = phs_colours("phs-blue")) +
   geom_hline(yintercept = 1, linetype = "dashed", colour = "grey30") +
   coord_flip() +
-  labs(x = NULL, y = "Rate Ratio (vs. reference HB)",
+  labs(x = NULL, 
+       y = "Rate Ratio (vs. Greater Glasgow and Clyde)",
        title = "Health Board Attendance Rate Ratios\n
        (adjusted for Age, Sex, Deprivation, interactions)") +
   theme_phs() +
   theme(plot.title = element_text(hjust = 0.5))
 
 hb_coefs_plt
+  
 
 ggsave("figures/risk_model/hb_rate_ratios.pdf", plot = hb_coefs_plt, 
        width = 8, height = 6)
