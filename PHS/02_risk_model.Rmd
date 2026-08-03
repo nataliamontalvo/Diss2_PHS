@@ -91,9 +91,11 @@ summary(baseline_model)
 ## 2.1 Diagnostics
 
 ```{r}
+pdf("figures/risk_model/gam_check_baseline.pdf", width = 10, height = 8)
 par(mfrow = c(2, 2))
 gam.check(baseline_model)
 par(mfrow = c(1, 1))
+dev.off()
 ```
 
 The k-index test is non-significant for both smooth terms
@@ -148,7 +150,9 @@ Cross-check against EDA findings:
 
 ```{r}
 # Smooth term plots
+pdf("figures/risk_model/smooth_terms_baseline.pdf", width = 10, height = 4)
 plot(baseline_model, pages = 1, shade = TRUE)
+dev.off()
 ```
 
 ## 2.5 Record baseline AIC
@@ -472,25 +476,33 @@ final_risk_model_B <- bam(
 ## 5.1 Diagnostics
 
 ```{r}
+pdf("figures/risk_model/gam_check_final_A.pdf", width = 10, height = 8)
 par(mfrow = c(2, 2))
 gam.check(final_risk_model_A)
 par(mfrow = c(1, 1))
+dev.off()
 ```
 
 ```{r}
+pdf("figures/risk_model/gam_check_final_B.pdf", width = 10, height = 8)
 par(mfrow = c(2, 2))
 gam.check(final_risk_model_B)
 par(mfrow = c(1, 1))
+dev.off()
 ```
 
 ## 5.2 Smooth term plots
 
 ```{r}
+pdf("figures/risk_model/smooth_terms_final_A.pdf", width = 10, height = 4)
 plot(final_risk_model_A, pages = 1, shade = TRUE)
+dev.off()
 ```
 
 ```{r}
+pdf("figures/risk_model/smooth_terms_final_B.pdf", width = 10, height = 4)
 plot(final_risk_model_B, pages = 1, shade = TRUE)
+dev.off()
 ```
 
 ## 5.3 Coefficient interpretation
@@ -539,6 +551,7 @@ hb_coefs <- hb_coefs %>%
     rr_lower = exp(Estimate - 1.96 * `Std. Error`),
     rr_upper = exp(Estimate + 1.96 * `Std. Error`)
   ) %>%
+  left_join(hb_names, by = "HBT") %>%
   arrange(desc(rate_ratio))
 
 hb_coefs
@@ -546,25 +559,31 @@ hb_coefs
 
 
 ```{r}
-hb_coefs_plt <- ggplot(hb_coefs, aes(x = fct_reorder(HBT, rate_ratio), y = rate_ratio)) +
+hb_coefs_plt <- ggplot(hb_coefs, aes(x = fct_reorder(HBName, rate_ratio), 
+                                     y = rate_ratio)) +
   geom_point(colour = phs_colours("phs-blue"), size = 3) +
   geom_errorbar(aes(ymin = rr_lower, ymax = rr_upper), width = 0.3,
                 colour = phs_colours("phs-blue")) +
   geom_hline(yintercept = 1, linetype = "dashed", colour = "grey30") +
   coord_flip() +
   labs(x = NULL, y = "Rate Ratio (vs. reference HB)",
-       title = "Health Board Attendance Rate Ratios\n(adjusted for Age, Sex, Deprivation, interactions)") +
-  theme_phs()
+       title = "Health Board Attendance Rate Ratios\n
+       (adjusted for Age, Sex, Deprivation, interactions)") +
+  theme_phs() +
+  theme(plot.title = element_text(hjust = 0.5))
 
 hb_coefs_plt
 
-# ggsave("figures/risk_model/hb_rate_ratios.pdf", plot = hb_coefs_plt, width = 8, height = 6)
+ggsave("figures/risk_model/hb_rate_ratios.pdf", plot = hb_coefs_plt, 
+       width = 8, height = 6)
 ```
 
 
 ## 6.2 GAM robustness check
+
 Refit the final specifications with gam not bam 
 
+### Model A - Deprivation Quintile
 ```{r}
 # Final model with Deprivation quintile
 final_risk_model_A_gam <- gam(
@@ -577,9 +596,35 @@ final_risk_model_A_gam <- gam(
   method = "REML"
 )
 
-# add comparison of coeffs
+final_coefs_A_gam <- as.data.frame(summary(final_risk_model_A_gam)$p.table)
+
+comparison_A <- data.frame(
+  term = rownames(final_coefs_A_gam),
+  gam_estimate = round(final_coefs_A_gam$Estimate, 5),
+  bam_estimate = round(final_coefs_A$Estimate, 5),
+  difference = round(final_coefs_A_gam$Estimate - final_coefs_A$Estimate, 5),
+  gam_se = round(final_coefs_A_gam$`Std. Error`, 5),
+  bam_se = round(final_coefs_A$`Std. Error`, 5))
+
+comparison_A
 ```
 
+```{r}
+# Smooth term comparison
+final_smooth_A_gam <- as.data.frame(summary(final_risk_model_A_gam)$s.table)
+final_smooth_A <- as.data.frame(summary(final_risk_model_A)$s.table)
+
+smooth_comparison_A <- data.frame(
+  term = rownames(final_smooth_A_gam),
+  gam_edf = round(final_smooth_A_gam$edf, 2),
+  bam_edf = round(final_smooth_A$edf, 2),
+  edf_diff = round(final_smooth_A_gam$edf - final_smooth_A$edf, 2)
+)
+
+smooth_comparison_A
+```
+
+### Model B - Deprivation Indicators
 ```{r}
 # Final model with Deprivation indicators
 final_risk_model_B_gam <- gam(
@@ -593,9 +638,33 @@ final_risk_model_B_gam <- gam(
   method = "REML"
 )
 
-# add comparison of coeffs
+final_coefs_B_gam <- as.data.frame(summary(final_risk_model_B_gam)$p.table)
+
+comparison_B <- data.frame(
+  term = rownames(final_coefs_B_gam),
+  gam_estimate = round(final_coefs_B_gam$Estimate, 5),
+  bam_estimate = round(final_coefs_B$Estimate, 5),
+  difference = round(final_coefs_B_gam$Estimate - final_coefs_B$Estimate, 5),
+  gam_se = round(final_coefs_B_gam$`Std. Error`, 5),
+  bam_se = round(final_coefs_B$`Std. Error`, 5))
+
+comparison_B
 ```
 
+```{r}
+# Smooth term comparison
+final_smooth_B_gam <- as.data.frame(summary(final_risk_model_B_gam)$s.table)
+final_smooth_B <- as.data.frame(summary(final_risk_model_B)$s.table)
+
+smooth_comparison_B <- data.frame(
+  term = rownames(final_smooth_B_gam),
+  gam_edf = round(final_smooth_B_gam$edf, 2),
+  bam_edf = round(final_smooth_B$edf, 2),
+  edf_diff = round(final_smooth_B_gam$edf - final_smooth_B$edf, 2)
+)
+
+smooth_comparison_B
+```
 
 ## 6.3 INLA robustness check
 
@@ -604,10 +673,8 @@ frequentist (GAM) and Bayesian (INLA) estimation frameworks.
 
 ```{r}
 risk_data_inla <- risk_data %>%
-  mutate(
-    HBT_id = as.numeric(HBT),
-    t_rounded = round(t)
-  )
+  mutate(HBT_id = as.numeric(HBT),
+         t_rounded = round(t))
 
 inla_risk <- inla(
   NumberOfAttendances ~
@@ -623,9 +690,51 @@ inla_risk <- inla(
 )
 
 summary(inla_risk)
+
+# INLA hyperparameters (dispersion, random effect variance)
+inla_risk$summary.hyperpar
 ```
 
 
+```{r}
+# Compare point estimates: BAM vs INLA
+final_estimates_A <- summary(final_risk_model_A)$p.table[, "Estimate"]
+
+inla_estimates <- inla_risk$summary.fixed$mean
+
+comparison_inla <- data.frame(
+  term = rownames(summary(final_risk_model_A)$p.table),
+  GAM = round(final_estimates_A, 4),
+  INLA = round(inla_estimates, 4),
+  difference = round(final_estimates_A - inla_estimates, 4))
+
+comparison_inla
+```
+
+The final Model A specification was refitted using INLA as a Bayesian robustness 
+check. Point estimates were consistent across frameworks: 36 of 38 coefficients 
+agreed to within +-0.001, with the largest difference in the intercept (0.060) 
+and weekend share (0.003).
+
+```{r}
+# INLA credible intervals vs GAM confidence intervals for key terms
+inla_fixed <- inla_risk$summary.fixed
+
+ci_comparison <- data.frame(
+  term = rownames(final_coefs_A),
+  gam_lower = round(final_coefs_A$Estimate - 1.96 * final_coefs_A$`Std. Error`, 4),
+  gam_upper = round(final_coefs_A$Estimate + 1.96 * final_coefs_A$`Std. Error`, 4),
+  inla_lower = round(inla_fixed$`0.025quant`, 4),
+  inla_upper = round(inla_fixed$`0.975quant`, 4)
+)
+
+ci_comparison
+```
+
+Credible intervals (INLA) and confidence intervals (GAM) were compared across
+all 38 coefficients. Intervals agree to within +- 0.001 at both bounds for 35 of 
+38 terms. The largest discrepancy was for weekend_pct, where INLA's credible 
+interval (0.005–0.009) was wider than GAM's confidence interval (0.009–0.012).
 
 
 
