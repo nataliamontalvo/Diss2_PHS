@@ -1,22 +1,22 @@
 
 # =============================================================================
-# Build admission model data
+# Build Admissions Model Data
 # =============================================================================
 #
 # Purpose:
-#   Build the admission model data for Step 2: given that someone has already
-#   attended A&E, what factors predict whether they are admitted to hospital?
+#   Build the admission model data, given that someone has already attended A&E,
+#   what factors predict whether they are admitted to hospital?
 #
 #   Two admission definitions are built for sensitivity comparison:
 #     - Narrow: "Admission to same Hospital" only
 #     - Broad:  also includes "Transferred to Other Hospital/Service"
 #
-# Note: This script sources risk_model_data.R (which itself sources prep.R) to 
-# reuse simd_hb.
+# Note: This script sources "R/prep.R" and therefore assumes that all raw data
+#   files and paths required by prep.R are available.
 #
 # =============================================================================
 
-source("R/risk_model_data.R")
+source("R/prep.R")
 
 # 1. Site level context -------------------------------------------------------
 

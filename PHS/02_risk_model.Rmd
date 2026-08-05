@@ -58,8 +58,8 @@ risk_data <- combined_model_data %>%
     HBT = factor(HBT),
     Age = factor(Age),
     Sex = factor(Sex),
-    Deprivation = factor(Deprivation)
-  )
+    Deprivation = factor(Deprivation))
+
 cat("Rows after filtering:", nrow(risk_data), "\n")
 cat("Rows excluded:", nrow(combined_model_data) - nrow(risk_data), "\n")
 ```
@@ -189,8 +189,8 @@ summary(model_income)
 aic_log <- aic_log %>% add_row(
   model = "+ Income_rate", aic = AIC(model_income),
   delta_aic = AIC(model_income) - baseline_aic,
-  note = "Income deprivation rate (HB x Quintile level)"
-)
+  note = "Income deprivation rate (HB x Quintile level)")
+
 aic_log
 ```
 
@@ -215,8 +215,7 @@ summary(model_emerg)
 aic_log <- aic_log %>% add_row(
   model = "+ EMERG", aic = AIC(model_emerg),
   delta_aic = AIC(model_emerg) - baseline_aic,
-  note = "Historical emergency stays ratio (SIMD health domain)"
-)
+  note = "Historical emergency stays ratio (SIMD health domain)")
 
 aic_log
 ```
@@ -242,8 +241,7 @@ aic_log <- aic_log %>% add_row(
   model = "+ oohours_pct + weekend_pct",
   aic = AIC(model_external),
   delta_aic = AIC(model_external) - baseline_aic,
-  note = "External operational context only (no SIMD indicators)"
-)
+  note = "External operational context only (no SIMD indicators)")
 
 aic_log
 ```
@@ -269,24 +267,8 @@ causal predictors.
 
 ## 3.4 Domain indicators replacing Deprivation
 
-Before fitting, examine inter-correlation among the available indicators. 
-
-```{r}
-cor_matrix <- risk_data %>%
-  select(Income_rate, Employment_rate, EMERG, crime_rate, 
-         ALCOHOL, DRUG, drive_GP) %>%
-  cor(use = "pairwise.complete.obs")
-
-round(cor_matrix, 2)
-```
-
-Income_rate, Employment_rate, EMERG, DRUG, and ALCOHOL are all correlated 
-at r = 0.85–0.99, reflecting the occurrence of multiple deprivation dimensions 
-in the same areas. 
-drive_GP is the only indicator negatively correlated with the others 
-(r = -0.19 to -0.38), capturing a distinct geographic access dimension. 
-
-Employment_rate (r = 0.99 with Income_rate) was excluded from all specifications.
+As shown in the EDA (Section 9.3), SIMD domain indicators are highly 
+correlated.
 
 ```{r}
 model_indicators <- bam(NumberOfAttendances ~
@@ -306,8 +288,8 @@ aic_log <- aic_log %>% add_row(
   model = "indicators (no Deprivation)",
   aic = AIC(model_indicators),
   delta_aic = AIC(model_indicators) - baseline_aic,
-  note = "SIMD domain indicators replace Deprivation quintile"
-)
+  note = "SIMD domain indicators replace Deprivation quintile")
+
 aic_log
 ```
 
@@ -343,8 +325,8 @@ aic_log <- aic_log %>% add_row(
   model = "indicators + alcohol/drug",
   aic = AIC(model_indicators_full),
   delta_aic = AIC(model_indicators_full) - baseline_aic,
-  note = "SIMD domain indicators + ALCOHOL and DRUG"
-)
+  note = "SIMD domain indicators + ALCOHOL and DRUG")
+
 aic_log
 ```
 
@@ -586,6 +568,11 @@ final_coefs_A$rr_upper <- exp(final_coefs_A$Estimate + 1.96 * final_coefs_A$`Std
 final_coefs_A
 ```
 
+Because Model A includes Age × Sex and Age × Deprivation interactions, the 
+main-effect coefficients are conditional: Age rate ratios apply to females 
+in quintile 1, the Sex rate ratio applies to 18-24 year olds, and the 
+Deprivation rate ratios apply to 18-24 year olds. The interaction terms 
+show how these effects differ for other combinations. 
 
 ```{r}
 final_coefs_B <- as.data.frame(summary(final_risk_model_B)$p.table)
@@ -595,6 +582,66 @@ final_coefs_B$rr_upper <- exp(final_coefs_B$Estimate + 1.96 * final_coefs_B$`Std
 final_coefs_B
 ```
 
+The rate ratios above are per 1-unit increase, but the continuous SIMD 
+indicators are on different scales, so raw rate ratios are not directly 
+comparable across predictors. The table below shows effects scaled to each 
+predictor's observed range.
+
+```{r}
+continuous_predictors <- c("Income_rate", "EMERG", "crime_rate", "drive_GP",
+                            "oohours_pct", "weekend_pct")
+
+# Check scales first
+risk_data %>%
+     summarise(across(all_of(continuous_predictors),
+                     list(min = ~ min(.x, na.rm = TRUE),
+                          q25 = ~ quantile(.x, 0.25, na.rm = TRUE),
+                          q75 = ~ quantile(.x, 0.75, na.rm = TRUE),
+                          max = ~ max(.x, na.rm = TRUE))))
+
+interpretation_increments <- c(Income_rate = 0.05, EMERG = 10, crime_rate = 100,
+                               drive_GP = 5, oohours_pct = 5, weekend_pct = 5)
+
+practical_interpretation <- tibble(
+  predictor = continuous_predictors,
+  estimate = final_coefs_B[continuous_predictors, "Estimate"],
+  increment = interpretation_increments,
+  q25 = sapply(continuous_predictors,
+               \(x) quantile(risk_data[[x]], 0.25, na.rm = TRUE)),
+  q75 = sapply(continuous_predictors,
+               \(x) quantile(risk_data[[x]], 0.75, na.rm = TRUE))
+) %>%
+  mutate(
+    iqr = q75 - q25,
+    rr_per_increment = exp(estimate * increment),
+    pct_change_increment = round(100 * (rr_per_increment - 1), 1),
+    rr_per_iqr = exp(estimate * iqr),
+    pct_change_iqr = round(100 * (rr_per_iqr - 1), 1)
+  )
+
+practical_interpretation
+```
+
+Key findings (scaled to observed ranges):
+
+- **Income_rate** (0.02–0.30): a 10-percentage-point increase in area 
+  income deprivation is associated with a 16% higher attendance rate. 
+  Across the full observed range, the most income-deprived areas have 
+  ~51% higher attendance than the least (RR = 1.51).
+- **EMERG** (59–165): across the full range of emergency hospitalisation 
+  ratios, attendance is ~38% higher in the most burdened areas (RR = 1.38).
+- **crime_rate** (78–891): across the full range, areas with highest crime 
+  have ~15% lower attendance (RR = 0.85) — the conditional urban/rural 
+  effect discussed in Section 3.4.
+- **drive_GP** (2.5–11.0 minutes): areas with the longest GP drive times 
+  have ~32% lower attendance (RR = 0.68) — the rurality dimension.
+- **oohours_pct** (42–65%): areas with the highest out-of-hours share 
+  have ~33% lower attendance (RR = 0.67).
+- **weekend_pct** (18–38%): areas with the highest weekend share have 
+  ~22% higher attendance (RR = 1.22).
+
+
+
 ```{r}
 concurvity(final_risk_model_B, full = TRUE)
 ```
@@ -602,15 +649,6 @@ concurvity(final_risk_model_B, full = TRUE)
 
 ## 5.4 Predicted rates and interaction visualisation
 
-Because Model A includes Age × Sex and Age × Deprivation interactions, 
-the main-effect coefficients are conditional: 
-- the Age rate ratios apply to females in deprivation quintile 1 (the reference 
-  categories)
-- the Sex rate ratio applies to 18-24 year olds
-- the Deprivation rate ratios apply to 18-24 year olds. 
-
-The interaction terms show how these effects differ for other combinations. 
-Predicted rates below provide population-averaged comparisons.
 
 ```{r}
 # Create prediction grid

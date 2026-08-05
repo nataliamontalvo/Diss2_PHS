@@ -7,10 +7,10 @@ output: html_document
 
 ```{r setup, include=FALSE}
 
-source("R/prep.R")
+source("R/mul_att_model_data.R")
 
 # Make sure the figure output folders exist
-dir.create("figures/multiple_attendance", recursive = TRUE, showWarnings = FALSE)
+dir.create("figures/mul_attendance", recursive = TRUE, showWarnings = FALSE)
 ```
 
 # 1. Data Recap
@@ -82,29 +82,6 @@ mul_att_long %>%
   )
 ```
 
-## 1.3 Prepare Model Data
-
-```{r}
-mul_model_data <- mul_att_data %>%
-  filter(!is.na(Age), Sex %in% c("Male", "Female"),
-         Deprivation %in% 1:5) %>%
-  mutate(
-    frequent = FivePlusAttendances,
-    not_frequent = OneAttendance + TwoAttendances +
-                   ThreeAttendances + FourAttendances,
-    total_patients = frequent + not_frequent,
-    Age = factor(Age, levels = age_levels),
-    Sex = factor(Sex),
-    Deprivation = factor(Deprivation)
-  )
-
-cat("Rows:", nrow(mul_model_data), "\n")
-cat("Total patients:", sum(mul_model_data$total_patients), "\n")
-cat("Frequent attenders:", sum(mul_model_data$frequent), "\n")
-cat("Overall frequent rate:",
-    round(sum(mul_model_data$frequent) / sum(mul_model_data$total_patients) * 100, 1), "%\n")
-```
-
 
 # 2. Baseline model
 
@@ -164,7 +141,7 @@ Cross-check against descriptive rates:
 ## 2.3 Diagnostics
 
 ```{r}
-pdf("figures/frequent_attenders/diagnostics_baseline.pdf", width = 8, 
+pdf("figures/mul_attendance/diagnostics_baseline.pdf", width = 8, 
     height = 6)
 par(mfrow = c(2, 2))
 plot(mul_baseline)
@@ -214,9 +191,7 @@ driving repeat A&E use in these areas.
 mul_model_dept <- glm(
   cbind(frequent, not_frequent) ~ Age + Sex + Deprivation + HBT + DepartmentType,
   family = quasibinomial(),
-  data = mul_model_data %>% mutate(HBT = factor(HBT),
-                                   DepartmentType = factor(DepartmentType))
-)
+  data = mul_model_data)
 
 summary(mul_model_dept)
 anova(mul_model_hbt, mul_model_dept, test = "F")
@@ -233,14 +208,6 @@ quintile with individual SIMD domain indicators to identify which
 specific aspect of deprivation drives frequent attendance.
 
 ```{r}
-mul_model_data_simd <- mul_model_data %>%
-  mutate(HBT = factor(HBT),
-         DepartmentType = factor(DepartmentType),
-         Deprivation_int = as.integer(as.character(Deprivation))) %>%
-  left_join(simd_hb %>% select(HB, Quintile, Income_rate, EMERG,
-                                crime_rate, drive_GP),
-            by = c("HBT" = "HB", "Deprivation_int" = "Quintile"))
-
 mul_model_indicators <- glm(
   cbind(frequent, not_frequent) ~ Age + Sex + Income_rate + EMERG +
     crime_rate + drive_GP + HBT + DepartmentType,
@@ -265,9 +232,7 @@ by confounding between HB-level indicators and HBT fixed effects.
 mul_model_interaction <- glm(
   cbind(frequent, not_frequent) ~ Age * Deprivation + Sex + HBT + DepartmentType,
   family = quasibinomial(),
-  data = mul_model_data %>% mutate(HBT = factor(HBT),
-                                    DepartmentType = factor(DepartmentType))
-)
+  data = mul_model_data)
 
 anova(mul_model_dept, mul_model_interaction, test = "F")
 summary(mul_model_interaction)
@@ -284,9 +249,8 @@ for interpretability.
 mul_final <- glm(
   cbind(frequent, not_frequent) ~ Age * Deprivation + Sex + HBT + DepartmentType,
   family = quasibinomial(),
-  data = mul_model_data %>% mutate(HBT = factor(HBT),
-                                    DepartmentType = factor(DepartmentType))
-)
+  data = mul_model_data)
+
 summary(mul_final)
 cat("Estimated dispersion:", round(summary(mul_final)$dispersion, 2), "\n")
 ```
@@ -295,7 +259,7 @@ cat("Estimated dispersion:", round(summary(mul_final)$dispersion, 2), "\n")
 ## 4.1 Diagnostics
 
 ```{r, fig.width=8, fig.height=6}
-pdf("figures/frequent_attenders/diagnostics_final.pdf", width = 8, height = 6)
+pdf("figures/mul_attendance/diagnostics_final.pdf", width = 8, height = 6)
 par(mfrow = c(2, 2))
 plot(mul_final)
 par(mfrow = c(1, 1))
@@ -353,7 +317,7 @@ hbt_freq_plt <- ggplot(hbt_coefs_mul,
 
 hbt_freq_plt
 
-ggsave("figures/frequent_attenders/hbt_freq_odds_ratios.pdf",
+ggsave("figures/mul_attendance/hbt_freq_odds_ratios.pdf",
        plot = hbt_freq_plt, width = 8, height = 6)
 ```
 
@@ -364,33 +328,20 @@ As a sensitivity check, redefine the outcome as any repeat attendance
 (2+ visits) rather than the clinical frequent-attender threshold (5+).
 
 ```{r}
-mul_model_data_2 <- mul_att_data %>%
-  filter(!is.na(Age), Sex %in% c("Male", "Female"),
-         Deprivation %in% 1:5) %>%
-  mutate(
-    repeat_att = TwoAttendances + ThreeAttendances +
-                 FourAttendances + FivePlusAttendances,
-    not_repeat_att = OneAttendance,
-    total_patients = repeat_att + not_repeat_att,
-    Age = factor(Age, levels = age_levels),
-    Sex = factor(Sex),
-    Deprivation = factor(Deprivation)
-  )
-
 cat("Rows:", nrow(mul_model_data_2), "\n")
 cat("Total patients:", sum(mul_model_data_2$total_patients), "\n")
 cat("Repeat attenders:", sum(mul_model_data_2$repeat_att), "\n")
 cat("Overall repeat rate:",
-    round(sum(mul_model_data_2$repeat_att) / sum(mul_model_data_2$total_patients) * 100, 1), "%\n")
+    round(sum(mul_model_data_2$repeat_att) / 
+            sum(mul_model_data_2$total_patients) * 100, 1), "%\n")
 ```
 
 ```{r}
 mul_sensitivity <- glm(
-  cbind(repeat_att, not_repeat_att) ~ Age + Sex + Deprivation + HBT + DepartmentType,
+  cbind(repeat_att, not_repeat_att) ~ Age + Sex + Deprivation + HBT + 
+    DepartmentType,
   family = quasibinomial(),
-  data = mul_model_data_2 %>% mutate(HBT = factor(HBT),
-                                      DepartmentType = factor(DepartmentType))
-)
+  data = mul_model_data_2)
 
 summary(mul_sensitivity)
 ```
@@ -415,41 +366,10 @@ dep_comparison <- primary_dep %>%
 dep_comparison
 ```
 
-If the deprivation gradient is steeper for the 5+ definition than the 2+
-definition, that would confirm the most deprived patients are
-disproportionately represented among the most frequent attenders
-specifically, not just among repeat visitors generally.
-
-
-# 6. Cross-Model Comparison
-
-Compare the deprivation gradient across all three stages of A&E
-utilisation. Fill in from each model's coefficient table.
-
-```{r}
-# Step 1: Risk model deprivation coefficients (from 02_risk_model.Rmd)
-# Using the baseline model coefficients (main effects, not interactions)
-# Step 3: From this model
-
-dep_cross_model <- tribble(
-  ~step, ~Q2, ~Q3, ~Q4, ~Q5,
-  "Step 1: Attendance risk (RR)",
-    exp(-0.128), exp(-0.335), exp(-0.418), exp(-0.501),
-  "Step 3: Frequent attender (OR)",
-    final_coefs_mul["Deprivation2", "odds_ratio"],
-    final_coefs_mul["Deprivation3", "odds_ratio"],
-    final_coefs_mul["Deprivation4", "odds_ratio"],
-    final_coefs_mul["Deprivation5", "odds_ratio"]
-)
-
-dep_cross_model
-```
-
-The deprivation gradient for frequent attendance (Step 3) is steeper
-than for overall attendance risk (Step 1): deprivation not only
-increases the probability of attending A&E but disproportionately
-increases the probability of attending repeatedly. This suggests
-that frequent attenders from deprived areas may face barriers to
-definitive treatment or follow-up care that drive them back to A&E.
+The deprivation gradient is steeper under the clinical frequent attender ´
+definition (5+) than under the broader repeat attender definition (2+): Q5 vs 
+Q1 odds ratio is 0.48 for frequent attenders versus 0.62 for repeat attenders. 
+This confirms that deprivation disproportionately concentrates at the highest 
+frequency end of the attendance distribution
 
 

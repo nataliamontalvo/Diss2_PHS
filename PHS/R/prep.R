@@ -10,7 +10,7 @@
 #     2. Define helper functions: ...
 #     3. Import raw data
 #     4. Initial checks of the datasets
-#     5. Clenaing of the datasets
+#     5. Cleaning of the datasets
 #
 # Note: This script should be run before the analysis scripts.
 # =============================================================================
@@ -122,9 +122,6 @@ mul_att_data <- read.csv("data/opendata_monthly_ae_multiple_attendances_demograp
 # When (day of week / time of day / in-hours vs out-of-hours) 
 when_data <- read.csv("data/opendata_monthly_ae_when_202604.csv")
 
-# Population data by health board, age and sex
-pop_data_t1 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx",
-                               sheet = 4, skip = 3)
 # Population density by health board
 pop_data_t4 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx",
                                sheet = 7, skip = 3)
@@ -141,24 +138,7 @@ simd_main <- read.csv("data/simd2020v2_22062020.csv")
 simd_ind <- read_xlsx("data/SIMD_2020v2_indicators.xlsx", sheet = 3, na = "*")
 
 
-# 4. Initial data checks ------------------------------------------------------
-
-summarise_columns(month_demo_data)
-summarise_columns(week_activity_data)
-summarise_columns(month_activity_data)
-summarise_columns(trt_loc)
-summarise_columns(referrals_data)
-summarise_columns(discharges_data)
-summarise_columns(mul_att_data)
-summarise_columns(when_data)
-summarise_columns(pop_data_t1)
-summarise_columns(pop_data_t4)
-summarise_columns(pop_data)
-summarise_columns(simd_main)
-summarise_columns(simd_ind)
-
-
-# 5. Clean individual datasets ------------------------------------------------
+# 4. Clean individual datasets ------------------------------------------------
 
 # Monthly demographics: drop QF columns and parse Month into a proper date
 month_demo_data <- month_demo_data %>%
@@ -231,4 +211,112 @@ pop_hb_density <- pop_data_t4 %>%
          population = 4,   # "Estimated population"
          area_km2 = 5,     # "Area (square km)"
          density = 6)      # "Population density"
+
+# Consistent age-band ordering across all datasets
+age_levels <- c("Under 18", "18-24", "25-39", "40-64", "65-74", "75 plus")
+
+month_demo_data <- month_demo_data %>%
+  mutate(Age = factor(Age, levels = age_levels))
+
+referrals_data <- referrals_data %>%
+  mutate(Age = factor(Age, levels = age_levels))
+
+discharges_data <- discharges_data %>%
+  mutate(Age = factor(Age, levels = age_levels))
+
+pop_dz <- pop_dz %>%
+  mutate(Age = factor(Age, levels = age_levels))
+
+# HB-level population by age and sex (for EDA plots and age/sex model)
+pop_hb_age_sex <- pop_dz %>%
+  filter(Year == max(Year)) %>%
+  left_join(simd_main %>% select(DataZone, HB), by = "DataZone") %>%
+  group_by(HB, Sex, Age) %>%
+  summarise(population = sum(population, na.rm = TRUE), .groups = "drop")
+
+mul_att_data <- mul_att_data %>%
+  mutate(Age = factor(Age, levels = age_levels))
+
+# Reshape multiple attendance data from wide to long
+mul_att_long <- mul_att_data %>%
+  pivot_longer(cols = OneAttendance:FivePlusAttendances,
+               names_to = "attendance_freq", values_to = "n_patients") %>%
+  mutate(
+    attendance_freq = factor(attendance_freq,
+                             levels = c("OneAttendance", "TwoAttendances", 
+                                        "ThreeAttendances","FourAttendances", 
+                                        "FivePlusAttendances"),
+                             labels = c("1", "2", "3", "4", "5+")))
+
+# HB name mapping 
+hb_names <- tribble(~HBT, ~HBName,
+                    "S08000015", "Ayrshire and Arran",
+                    "S08000016", "Borders",
+                    "S08000017", "Dumfries and Galloway",
+                    "S08000019", "Forth Valley",
+                    "S08000020", "Grampian",
+                    "S08000022", "Highland",
+                    "S08000024", "Lothian",
+                    "S08000025", "Orkney",
+                    "S08000026", "Shetland",
+                    "S08000028", "Western Isles",
+                    "S08000029", "Fife",
+                    "S08000030", "Tayside",
+                    "S08000031", "Greater Glasgow and Clyde",
+                    "S08000032", "Lanarkshire")
+
+
+
+# 5. SIMD aggregation ---------------------------------------------------------
+
+# Merge SIMD data sets by Data Zone
+simd_joined <- simd_ind %>%
+  left_join(simd_main %>% select(DataZone, HB, CA, 
+                                 Quintile = SIMD2020V2CountryQuintile),
+            by = c("Data_Zone" = "DataZone"))
+
+# Verify whether Income_rate/Employment_rate can be safely recomputed from
+# counts, or must stay as weighted averages of the original SIMD-calculated
+# rate.
+
+# simd_ind %>%
+#   mutate(recomputed = 100 * Income_count / Total_population) %>%
+#   summarise(max_diff = max(abs(recomputed - Income_rate), na.rm = TRUE))
+# 
+# simd_ind %>%
+#   mutate(recomputed = 100 * Employment_count / Working_age_population) %>%
+#   summarise(max_diff = max(abs(recomputed - Employment_rate), na.rm = TRUE))
+
+# Aggregate by HB and quintile
+simd_hb <- simd_joined %>%
+  group_by(HB, Quintile) %>%
+  summarise(
+    # Population totals
+    quintile_population = sum(Total_population, na.rm = TRUE),
+    quintile_working_age_population = sum(Working_age_population, na.rm = TRUE),
+    n_data_zones = n_distinct(Data_Zone),
+    
+    # Income, employment and housing counts: kept as sums
+    Income_count = sum(Income_count, na.rm = TRUE),
+    Employment_count = sum(Employment_count, na.rm = TRUE),
+    across(c(crime_count, overcrowded_count, nocentralheat_count),
+           ~ sum(.x, na.rm = TRUE)),
+    
+    # Rate, ratio and travel time indicators: population weighted mean
+    across(c(Income_rate, Employment_rate, CIF, ALCOHOL, DRUG, SMR, DEPRESS,
+             LBWT, EMERG, Attendance, Attainment, no_qualifications,
+             not_participating, University, crime_rate,
+             starts_with("drive_"), starts_with("PT_"), Broadband),
+           ~ weighted.mean(.x, w = Total_population, na.rm = TRUE)),
+    .groups = "drop")
+
+# Collapse SIMD indicators to HB level
+simd_hb_overall <- simd_hb %>%
+  group_by(HB) %>%
+  summarise(
+    across(c(Income_rate, Employment_rate, crime_rate, ALCOHOL, DRUG, EMERG, 
+             drive_GP),
+           ~ weighted.mean(.x, w = quintile_population, na.rm = TRUE)),
+    total_population = sum(quintile_population, na.rm = TRUE),
+    .groups = "drop")
 

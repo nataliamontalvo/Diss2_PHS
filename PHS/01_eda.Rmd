@@ -10,9 +10,7 @@ output: html_document
 # prep.R handles package loading, helper functions, data import and cleaning.
 # risk_model_data.R sources prep.R internally, then builds SIMD aggregations,
 # shared context variables, and the risk model datasets.
-source("R/risk_model_data.R")
-
-# source("R/admissions_model_data.R")
+source("R/prep.R")
 
 # Make sure the figure output folders exist
 dir.create("figures/eda", recursive = TRUE, showWarnings = FALSE)
@@ -958,20 +956,10 @@ tail(mul_att_data)
 
 ## 7.1 Overall distribution of attendance frequency
 
-```{r}
-# Convert frequency columns into long format so that frequency categories 
-# can be summarised and plotted consistently.
-mul_att_long <- mul_att_data %>%
-  pivot_longer(cols = OneAttendance:FivePlusAttendances,
-               names_to = "attendance_freq", values_to = "n_patients") %>%
-  mutate(
-    attendance_freq = factor(attendance_freq,
-      levels = c("OneAttendance", "TwoAttendances", "ThreeAttendances",
-                  "FourAttendances", "FivePlusAttendances"),
-      labels = c("1", "2", "3", "4", "5+")),
-    Age = factor(Age, levels = age_levels)
-  )
+`mul_att_long` is created in prep.R, reshaping from wide to long so it's 
+easier to compute the summaries.
 
+```{r}
 freq_totals <- mul_att_long %>%
   group_by(attendance_freq) %>%
   summarise(n_patients = sum(n_patients, na.rm = TRUE), .groups = "drop")
@@ -1317,7 +1305,7 @@ indicators_by_quintile_plt <- ggplot(simd_long,
                                       aes(x = Quintile, y = value)) +
   geom_boxplot(fill = phs_colours("phs-teal"), alpha = 0.7) +
   facet_wrap(~ indicator, scales = "free_y") +
-  labs(x = "Deprivation Quintile (1 = most deprived)",
+  labs(x = "Deprivation Quintile",
        y = "Indicator value",
        title = "SIMD Domain Indicators by Deprivation Quintile") +
   theme_phs() +
@@ -1378,9 +1366,15 @@ boards like Highland, Shetland and Western Isles).
 ## 9.6 Island-board quintile gaps
 
 ```{r}
-# missing_combos is already computed in build_risk_data.R 
-missing_combos %>%
+# Island board quintile gaps
+missing_combos <- expand_grid(
+  HB = sort(unique(month_demo_data$HBT)), 
+  Quintile = 1:5
+) %>% 
+  anti_join(simd_hb, by = c("HB", "Quintile")) %>%
   left_join(hb_names, by = c("HB" = "HBT"))
+
+missing_combos
 ```
 
 Three island health boards (Orkney, Shetland, Western Isles) have no data 
