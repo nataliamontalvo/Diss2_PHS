@@ -258,7 +258,7 @@ cat("Estimated dispersion:", round(summary(mul_final)$dispersion, 2), "\n")
 
 ## 4.1 Diagnostics
 
-```{r, fig.width=8, fig.height=6}
+```{r}
 pdf("figures/mul_attendance/diagnostics_final.pdf", width = 8, height = 6)
 par(mfrow = c(2, 2))
 plot(mul_final)

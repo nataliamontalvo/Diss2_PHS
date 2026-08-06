@@ -802,6 +802,34 @@ ggsave("figures/risk_model/hb_rate_ratios.pdf", plot = hb_coefs_plt,
        width = 8, height = 6)
 ```
 
+```{r}
+library(sf)
+hb_shp <- st_read("data/SG_NHS_HealthBoards_2019/SG_NHS_HealthBoards_2019.shp")
+
+# Join model results
+hb_map_data <- hb_shapefile %>%
+  left_join(hb_coefs %>% select(HBT, HBName, rate_ratio),
+            by = c("HBCode" = "HBT"))
+
+risk_map_plt <- ggplot(hb_map_data) +
+  geom_sf(aes(fill = rate_ratio), colour = "grey30", linewidth = 0.5) +
+  scale_fill_gradient2(low = phs_colours("phs-blue"),
+                        mid = "grey95",
+                        high = phs_colours("phs-rust"),
+                        midpoint = 1,
+                        limits = c(0.6, 1.1),
+                        name = "Rate Ratio\n(vs GGC)") +
+  labs(title = "A&E Attendance Rate Ratios by Health Board") +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
+
+risk_map_plt
+
+ggsave("figures/risk_model/hb_map_attendance_rr.pdf",
+       plot = risk_map_plt, width = 8, height = 10)
+
+```
 
 ## 6.2 GAM robustness check
 

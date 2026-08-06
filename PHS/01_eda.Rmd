@@ -695,21 +695,25 @@ head(referrals_data)
 ## 5.1 Overall attendance volume by referral source
 
 ```{r}
-# Attendance by referral type in general
+# Attendance by referral type
 referral_types <- referrals_data %>%
-  mutate(Referral = case_when(
-    is.na(Referral) | trimws(Referral) %in% c("", ":") ~ "Not Known",
-    TRUE ~ Referral
-  )) %>%
   group_by(Referral) %>%
-  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop")
+  summarise(total = sum(NumberOfAttendances, na.rm = TRUE), .groups = "drop") %>%
+  mutate(pct = round(total / sum(total) * 100, 1)) %>%
+  arrange(desc(total))
 
+referral_types
+```
+
+```{r}
 referrals_type_plt <- ggplot(referral_types, 
                               aes(x = fct_reorder(Referral, total), 
                                   y = total)) +
   geom_col(fill = phs_colours("phs-graphite")) +
+  geom_text(aes(label = paste0(pct, "%")), hjust = -0.1, size = 3) +
   coord_flip() +
-  scale_y_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma, 
+                     expand = expansion(mult = c(0, 0.15))) +
   labs(x = NULL, y = "Total Attendances",
        title = "Attendances by Referral Source") +
   theme_phs() +
