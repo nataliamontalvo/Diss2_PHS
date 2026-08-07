@@ -129,7 +129,6 @@ pop_data_t4 <- read_xlsx("data/data-mid-year-population-estimates-2024.xlsx",
 # Population data by data zone, age and sex 
 pop_data <- read.csv("data/dz2011-pop-est_24022026.csv")
 
-
 # SIMD main (Data Zone, HB, quintile)
 simd_main <- read.csv("data/simd2020v2_22062020.csv")
 

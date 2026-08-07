@@ -807,7 +807,7 @@ library(sf)
 hb_shp <- st_read("data/SG_NHS_HealthBoards_2019/SG_NHS_HealthBoards_2019.shp")
 
 # Join model results
-hb_map_data <- hb_shapefile %>%
+hb_map_data <- hb_shp %>%
   left_join(hb_coefs %>% select(HBT, HBName, rate_ratio),
             by = c("HBCode" = "HBT"))
 

@@ -4,12 +4,10 @@
 # =============================================================================
 #
 # Purpose:
-#   Build three versions of the attendance risk model data, reflecting the
-#   population denominator options discussed for this project:
-#     1. age_sex_model_data: Age x Sex, exact population (no Deprivation)
-#     2. deprivation_model_data: Deprivation, exact population (no Age/Sex)
-#     3. combined_model_data: Age x Sex x Deprivation together, using an
-#                             exact joint population built from pop_data.
+#   Build three versions of the attendance risk model dataat the
+#   Month x HB x Age x Sex x Deprivation grain, with an exact joint
+#   population denominator built from NRS Data Zone Population Estimates
+#   joined to SIMD 2020 quintile classification.
 #
 # Note: This script sources "R/prep.R" and therefore assumes that all raw data
 #       files and paths required by prep.R are available.
@@ -60,65 +58,9 @@ when_hb_monthly <- when_data %>%
   select(Month, HBT, oohours_pct, weekend_pct)
 
 
-# 2. Age/sex risk model data --------------------------------------------------
+# 2. Combined age/sex/deprivation model data ----------------------------------
 
-## 2.1 Dataset: Month x HB x Age x Sex
-age_sex_model_data <- month_demo_data %>%
-  
-  # Exclude records with missing age and sex (approximately 2%)
-  filter(!is.na(Age), Age != "", Sex %in% c("Male", "Female")) %>%
-  
-  group_by(Month, m_date, year, m_num, HBT, Age, Sex) %>%
-  summarise(NumberOfAttendances = sum(NumberOfAttendances, na.rm = TRUE),
-            .groups = "drop") %>%
-  mutate(t = as.numeric(m_date - min(m_date)) / 30) %>%
-  left_join(pop_hb_age_sex, by = c("HBT" = "HB", "Age", "Sex")) %>%
-  left_join(simd_hb_overall, by = c("HBT" = "HB")) %>%
-  left_join(when_hb_monthly, by = c("Month", "HBT")) %>%
-  left_join(referral_hb_age_monthly, by = c("Month", "HBT", "Age"))
-
-## 2.2 Checks
-
-# Rows with no population match
-age_sex_model_data %>% filter(is.na(population)) %>% distinct(HBT, Age, Sex)
-
-age_sex_model_data %>%
-  summarise(n_rows = n(),
-            n_missing_population = sum(is.na(population)),
-            pct_missing_population = mean(is.na(population)) * 100)
-
-
-# 3. Deprivation risk model data ----------------------------------------------
-
-## 3.1 Dataset: Month x HB x Deprivation
-deprivation_model_data <- month_demo_data %>%
-  filter(Deprivation %in% 1:5) %>%
-  group_by(Month, m_date, year, m_num, HBT, Deprivation) %>%
-  summarise(NumberOfAttendances = sum(NumberOfAttendances, na.rm = TRUE),
-            .groups = "drop") %>%
-  mutate(t = as.numeric(m_date - min(m_date)) / 30) %>%
-  left_join(simd_hb, by = c("HBT" = "HB", "Deprivation" = "Quintile")) %>%
-  left_join(when_hb_monthly, by = c("Month", "HBT")) %>%
-  left_join(referral_hb_monthly, by = c("Month", "HBT"))
-
-
-## 3.2 Checks
-
-# Rows with no quintile_population match
-deprivation_model_data %>% filter(is.na(quintile_population)) %>% 
-  distinct(HBT, Deprivation)
-
-# Which HB-Quintile combinations are genuinely absent from simd_hb?
-expected_combos <- expand_grid(HB = sort(unique(month_demo_data$HBT)), 
-                               Quintile = 1:5)
-missing_combos <- expected_combos %>% anti_join(simd_hb, 
-                                                by = c("HB", "Quintile"))
-missing_combos
-
-
-# 4. Combined age/sex/deprivation model data ----------------------------------
-
-## 4.1 Dataset: Month x HB x Age x Sex x Deprivation
+## 2.1 Dataset: Month x HB x Age x Sex x Deprivation
 
 # Built directly from pop_dz (Data Zone x Age x Sex population), joined to 
 # its SIMD quintile via simd_main, then aggregated up to HB x Quintile x Age x 
@@ -156,28 +98,23 @@ combined_model_data <- month_demo_data %>%
   left_join(referral_hb_age_monthly, by = c("Month", "HBT", "Age"))%>%
   left_join(hb_names, by = "HBT")
 
-## 4.2 Checks
 
-# Confirm the year-cap logic 
+## 2.2 Checks
+
+# Confirm the year cap logic 
 combined_model_data %>% distinct(year, pop_year) %>% arrange(year)
 
-# Rows with no matched population - expect only the known island-board
-# quintile gaps (S08000025, S08000026 and S08000028 missing quintile 1/4/5,
-# see missing_combos in Section 4.2)
+# Rows with no matched population
 combined_model_data %>% 
   filter(is.na(population)) %>%
   distinct(HBT, Age, Sex, Deprivation)
 
-# Duplicate-row check - each Month x HB x Age x Sex x Deprivation combination
-# should appear exactly once; should return zero rows
+# Duplicate row check
 combined_model_data %>%
   count(Month, HBT, Age, Sex, Deprivation) %>%
   filter(n > 1)
 
-# do not need this any more??? 
-# National population reconciliation for a single year (2020) - compare the
-# year-varying table's 2020 slice against simd_hb's quintile_population
-# (which reflects SIMD 2020 with 2017 population).
+# National population reconciliation for a single year (2020)
 pop_hb_age_sex_quintile_year %>%
   filter(Year == 2020) %>%
   summarise(total = sum(population, na.rm = TRUE))
