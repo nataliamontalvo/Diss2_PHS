@@ -1,6 +1,6 @@
 ---
-title: "PHS Multiple attendance"
-author: "Natalia"
+title: "PHS Multiple Attendance Analysis"
+author: "Natalia Montalvo Cabornero"
 date: "2026-08-14"
 output: html_document
 ---
@@ -8,6 +8,10 @@ output: html_document
 ```{r setup, include=FALSE}
 
 source("R/mul_att_model_data.R")
+
+# Theme for plotting created in prep.R, sourced through mul_att_model_data.R
+theme_set(theme_report())
+
 
 # Make sure the figure output folders exist
 dir.create("figures/mul_attendance", recursive = TRUE, showWarnings = FALSE)

@@ -6,8 +6,8 @@
 # Purpose:
 #   Set up the R environment, define reusable helper functions, import the raw
 #   datasets, and carry out cleaning steps required by later analyses.
-#     1. Load packages used across the project ...
-#     2. Define helper functions: ...
+#     1. Load packages used across the project 
+#     2. Define helper functions
 #     3. Import raw data
 #     4. Initial checks of the datasets
 #     5. Cleaning of the datasets
@@ -95,6 +95,19 @@ weighted_mean_or_na <- function(x, w) {
   if (!any(valid)) return(NA_real_)
   weighted.mean(x[valid], w[valid])
 }
+
+# Consistent plotting theme for report figures
+theme_report <- function() {
+  theme_phs() +
+    theme(
+      plot.title = element_text(size = 15, face = "bold",hjust = 0.5,
+                                margin = margin(b = 10)),
+      axis.title = element_text(size = 14),
+      axis.text = element_text(size = 13),
+      legend.title = element_text(size = 13),
+      legend.text = element_text(size = 13),
+      strip.text = element_text(size = 11, face = "bold"),
+      plot.margin = margin(10, 10, 10, 10))}
 
 # 3. Import raw data ----------------------------------------------------------
 

@@ -9,6 +9,9 @@ output: html_document
 
 source("R/admissions_model_data.R")
 
+# Theme for plotting created in prep.R, sourced through admissions_model_data.R
+theme_set(theme_report())
+
 # Make sure the figure output folders exist
 dir.create("figures/admissions_model", recursive = TRUE, showWarnings = FALSE)
 ```
